@@ -33,6 +33,11 @@ rails generate outbound_http_logger:migration
 rails db:migrate
 ```
 
+### Compatibility
+
+This gem supports Ruby versions **3.2** and newer and is tested against
+Ruby 3.2, 3.3, and 3.4 on Rails 7.2 and 8.0.2.
+
 ## Configuration
 
 ### Basic Setup
@@ -532,7 +537,7 @@ The gem includes GitHub Actions workflows that automatically run on:
 - Pull requests targeting `develop` or `main` branches (when gem files change)
 
 The CI pipeline includes:
-- **Test Job**: Runs tests against Ruby 3.4 and Rails 7.2
+- **Test Job**: Runs tests against Ruby 3.2, 3.3, and 3.4 on Rails 7.2 and 8.0.2
 - **Build Job**: Validates gem can be built successfully
 - **Quality Job**: Runs RuboCop linting and validates gemspec
 - **Security Job**: Runs bundler-audit for dependency vulnerabilities
