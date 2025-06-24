@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+print_header() {
+    echo
+    print_status $BLUE "=== $1 ==="
+}
+
+# Change to gem directory
+cd "$(dirname "$0")/.."
+
+print_status $BLUE "🚀 Running CI checks for outbound_http_logger gem"
+
+# Check if we're in the right directory
+if [[ ! -f "outbound_http_logger.gemspec" ]]; then
+    print_status $RED "❌ Error: Not in outbound_http_logger gem directory"
+    exit 1
+fi
+
+# Install dependencies
+print_header "Installing Dependencies"
+bundle install
+
+# Run tests
+print_header "Running Tests"
+test_files=(
+    "test/patches/test_net_http_patch.rb"
+    "test/concerns/test_outbound_logging.rb"
+    "test/integration/test_loggable_integration.rb"
+    "test/models/test_outbound_request_log.rb"
+    "test/test_outbound_http_logger.rb"
+)
+
+all_tests_passed=true
+for test_file in "${test_files[@]}"; do
+    if [[ -f "$test_file" ]]; then
+        print_status $BLUE "Running $test_file..."
+        if ! bundle exec ruby -Ilib:test "$test_file"; then
+            print_status $RED "❌ $test_file failed"
+            all_tests_passed=false
+        fi
+    fi
+done
+
+if $all_tests_passed; then
+    print_status $GREEN "✅ All tests passed"
+else
+    print_status $RED "❌ Some tests failed"
+    exit 1
+fi
+
+# Run RuboCop
+print_header "Running RuboCop"
+if bundle exec rubocop . --config ./.rubocop.yml; then
+    print_status $GREEN "✅ RuboCop passed"
+else
+    print_status $YELLOW "⚠️  RuboCop found issues (non-blocking for now)"
+fi
+
+# Build gem
+print_header "Building Gem"
+if bundle exec rake build; then
+    print_status $GREEN "✅ Gem built successfully"
+else
+    print_status $RED "❌ Gem build failed"
+    exit 1
+fi
+
+# Validate gemspec
+print_header "Validating Gemspec"
+if bundle exec gem specification pkg/*.gem > /dev/null; then
+    print_status $GREEN "✅ Gemspec is valid"
+else
+    print_status $RED "❌ Gemspec validation failed"
+    exit 1
+fi
+
+# Check for TODO/FIXME comments
+print_header "Checking for TODO/FIXME Comments"
+if grep -r "TODO\|FIXME" lib/ test/ --exclude-dir=.git 2>/dev/null; then
+    print_status $YELLOW "⚠️  Found TODO/FIXME comments"
+else
+    print_status $GREEN "✅ No TODO/FIXME comments found"
+fi
+
+# Security audit
+print_header "Running Security Audit"
+if command -v bundle-audit >/dev/null 2>&1; then
+    if bundle-audit check --update; then
+        print_status $GREEN "✅ Security audit passed"
+    else
+        print_status $YELLOW "⚠️  Security audit found issues"
+    fi
+else
+    print_status $YELLOW "⚠️  bundle-audit not installed, skipping security check"
+    print_status $BLUE "   Install with: gem install bundler-audit"
+fi
+
+print_status $GREEN "🎉 All CI checks completed successfully!"

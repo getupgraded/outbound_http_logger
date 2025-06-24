@@ -1,0 +1,41 @@
+plugins:
+- rubocop-rails
+- rubocop-thread_safety
+- rubocop-minitest
+- rubocop-performance
+- rubocop-md
+- rubocop-packaging
+- rubocop-rake
+
+AllCops:
+  TargetRubyVersion: 3.4
+  TargetRailsVersion: 7.2
+  Include:
+    - 'lib/**/*.rb'
+    - 'test/**/*.rb'
+    - 'Rakefile'
+    - 'outbound_http_logger.gemspec'
+  Exclude:
+    - 'bin/**/*'
+    - 'sig/**/*'
+    - 'lib/outbound_http_logger/generators/templates/**/*'
+
+# Gem-specific overrides
+Style/Documentation:
+  Enabled: true
+  Exclude:
+    - 'test/**/*'
+
+Metrics/BlockLength:
+  Exclude:
+    - 'test/**/*'
+    - 'outbound_http_logger.gemspec'
+
+# Allow longer lines in tests for readability
+Layout/LineLength:
+  Exclude:
+    - 'test/**/*'
+
+Layout/IndentationConsistency:
+  Enabled: true
+  EnforcedStyle: indented_internal_methods
