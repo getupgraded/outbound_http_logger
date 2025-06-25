@@ -163,6 +163,107 @@ OutboundHttpLogger.enable_secondary_logging!(
 
 **Justification**: Allows separation of logging data from main application database for performance, analytics, or compliance reasons.
 
+### 3. Database Connection Management for Secondary Databases
+
+The gem implements a careful approach to database connections that respects Rails' multi-database architecture:
+
+```ruby
+# ✅ Correct - Add configuration without establishing primary connection
+ActiveRecord::Base.configurations.configurations << ActiveRecord::DatabaseConfigurations::HashConfig.new(
+  env_name,
+  connection_name.to_s,
+  config
+)
+
+# ✅ Correct - Dynamic model classes with custom connection method
+klass = Class.new(OutboundHttpLogger::Models::OutboundRequestLog) do
+  @adapter_connection_name = adapter_connection_name
+
+  def self.connection
+    ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+  end
+end
+
+# ❌ Wrong - Direct establish_connection interferes with Rails
+klass.establish_connection(connection_name)
+
+# ❌ Wrong - connects_to doesn't work with non-abstract classes
+klass.connects_to database: { writing: connection_name }
+```
+
+**Critical Rules for Secondary Database Support**:
+
+1. **Never use `establish_connection` on model classes** - This can interfere with Rails' primary database configuration and multi-database setups
+2. **Add configurations to Rails but don't establish connections** - Let Rails manage connection establishment through its normal mechanisms
+3. **Use custom connection methods for secondary databases** - Override the `connection` method to retrieve the correct connection from Rails' connection handler
+4. **Inherit from main model classes** - Dynamic adapter model classes should inherit from the main model to get all instance methods like `formatted_call`
+
+**Rationale**: Rails applications often use multiple databases (primary, read replicas, logging databases, etc.). The gem must not interfere with the main application's database configuration. By adding configurations without establishing connections, we let Rails handle connection pooling, failover, and multi-database routing properly.
+
+**Rule**: Leverage Rails' connection pooling and multi-database support. Never manage database connections manually or interfere with the main application's database setup.
+
+### 4. Safe Connection Handling and Failure Modes
+
+The gem must handle database connection issues gracefully without breaking the parent application:
+
+```ruby
+# ✅ Correct - Explicit connection handling with safe failures
+def log_request(...)
+  return unless enabled?
+
+  begin
+    model_class.create!(request_data)
+  rescue ActiveRecord::ConnectionNotEstablished => e
+    # Log error but don't crash the app
+    logger.error "OutboundHttpLogger: Database connection failed: #{e.message}"
+    return false
+  rescue StandardError => e
+    # Log unexpected errors but don't crash the app
+    logger.error "OutboundHttpLogger: Failed to log request: #{e.message}"
+    return false
+  end
+end
+
+# ✅ Correct - Explicit connection configuration
+def connection
+  if @adapter_connection_name
+    # Use configured named connection - fail explicitly if not available
+    ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+  else
+    # Use default connection when explicitly configured to do so
+    ActiveRecord::Base.connection
+  end
+rescue ActiveRecord::ConnectionNotEstablished => e
+  # Don't fall back silently - log the specific issue
+  logger.error "OutboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+  raise
+end
+
+# ❌ Wrong - Silent fallbacks mask configuration issues
+def connection
+  ActiveRecord::Base.connection_handler.retrieve_connection(@adapter_connection_name.to_s)
+rescue ActiveRecord::ConnectionNotEstablished
+  # This hides real configuration problems!
+  ActiveRecord::Base.connection
+end
+```
+
+**Critical Connection Handling Rules**:
+
+1. **No Silent Fallbacks**: If configured to use a named connection, use only that connection. Don't fall back to default connection silently.
+
+2. **Explicit Configuration**: Make it clear in configuration whether to use default or named connection.
+
+3. **Safe Startup Failures**: During gem initialization, connection failures can raise errors (but catch them in the gem's initialization code).
+
+4. **Safe Runtime Failures**: During request logging, connection failures should log errors but never crash the parent application.
+
+5. **Clear Error Messages**: Log specific connection names and error details to aid debugging.
+
+6. **Test Explicit Configuration**: In tests, explicitly configure which connection strategy to use rather than relying on fallbacks.
+
+**Rationale**: Silent fallbacks between database connections can mask serious configuration issues in production. If a gem is configured to use a specific database connection, it should use exactly that connection or fail with a clear error message. This makes configuration problems obvious during development and testing rather than causing subtle issues in production.
+
 ## Security Patterns
 
 ### 1. Automatic Data Filtering
@@ -219,6 +320,11 @@ return unless OutboundHttpLogger.enabled?
 3. **Don't ignore thread safety** - Use thread-local variables for request-specific data
 4. **Don't skip data filtering** - Always filter sensitive information
 5. **Don't block HTTP requests** - Logging errors must not propagate
+6. **Don't use `establish_connection` on secondary database models** - Interferes with Rails multi-database setup
+7. **Don't use `connects_to` with non-abstract model classes** - Causes "not allowed" errors
+8. **Don't use file-based test databases without cleanup** - Use in-memory SQLite for better performance
+9. **Don't use silent fallbacks between database connections** - Masks configuration issues and causes production problems
+10. **Don't let database errors crash the parent application** - Always handle connection and query errors gracefully
 
 ## Development Guidelines
 

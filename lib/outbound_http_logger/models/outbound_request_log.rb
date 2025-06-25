@@ -96,19 +96,19 @@ module OutboundHttpLogger
           nil
         end
 
+
+
         # Search logs by various criteria
         def search(params = {})
+          # Ensure database adapter is included
+          ensure_database_adapter_included
+
           scope = all
 
           # General search
           if params[:q].present?
             q     = "%#{params[:q].downcase}%"
-            scope = scope.where(
-              'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
-              q,
-              q,
-              q
-            )
+            scope = apply_text_search(scope, q, params[:q])
           end
 
           # Filter by status
@@ -170,6 +170,22 @@ module OutboundHttpLogger
 
         def total_requests
           count
+        end
+
+        # Ensure the appropriate database adapter is included
+        def ensure_database_adapter_included
+          return if @adapter_included
+
+          adapter_name = connection.adapter_name.downcase
+          case adapter_name
+          when 'postgresql'
+            include OutboundHttpLogger::DatabaseAdapters::PostgresqlAdapter
+          when 'sqlite3', 'sqlite'
+            include OutboundHttpLogger::DatabaseAdapters::SqliteAdapter
+          end
+          @adapter_included = true
+        rescue ActiveRecord::ConnectionNotEstablished
+          # Connection not established yet, will be included later when needed
         end
 
         # Database-specific text search
@@ -422,5 +438,7 @@ module OutboundHttpLogger
           end
         end
     end
+
+
   end
 end

@@ -122,6 +122,85 @@ describe "JSON Storage Behavior" do
     end
   end
 
+  describe "PostgreSQL JSONB functionality" do
+    before do
+      OutboundHttpLogger.enable!
+    end
+
+    it "detects JSONB usage correctly" do
+      # This will depend on the database adapter being used in tests
+      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL'
+        # Skip if we don't have the actual table yet (migration not run)
+        skip 'JSONB test requires PostgreSQL with migrated table' unless model.table_exists?
+      else
+        _(model.using_jsonb?).must_equal false
+      end
+    end
+
+    it "stores JSON response as parsed object for JSONB" do
+      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+
+      request_data = {
+        headers: { "Content-Type" => "application/json" },
+        body: { "test" => true }
+      }
+      response_data = {
+        status_code: 200,
+        body: { "status" => "success", "data" => { "id" => 123, "name" => "test" } }
+      }
+
+      log = model.log_request("POST", "https://api.example.com/test", request_data, response_data, 0.1)
+
+      _(log).wont_be_nil
+      # For JSONB, response_body should be stored as a parsed hash, not a string
+      _(log.read_attribute(:response_body)).must_be_kind_of Hash
+      _(log.read_attribute(:request_body)).must_be_kind_of Hash
+      _(log.response_body["status"]).must_equal "success"
+      _(log.response_body["data"]["id"]).must_equal 123
+      _(log.request_body["test"]).must_equal true
+    end
+
+    it "stores non-JSON response as string for JSONB" do
+      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+
+      request_data = { body: "plain text request" }
+      response_data = { status_code: 200, body: "plain text response" }
+
+      log = model.log_request("GET", "https://api.example.com/test", request_data, response_data, 0.1)
+
+      _(log).wont_be_nil
+      # For non-JSON content, should remain as string
+      _(log.read_attribute(:response_body)).must_be_kind_of String
+      _(log.read_attribute(:request_body)).must_be_kind_of String
+      _(log.response_body).must_equal "plain text response"
+      _(log.request_body).must_equal "plain text request"
+    end
+
+    it "uses JSONB operators for search when available" do
+      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+
+      # Create test logs with JSON data
+      json_log = model.create!(
+        http_method: "POST",
+        url: "https://api.example.com/users",
+        status_code: 200,
+        response_body: { "users" => [{ "name" => "John", "role" => "admin" }] }
+      )
+
+      text_log = model.create!(
+        http_method: "GET",
+        url: "https://api.example.com/status",
+        status_code: 200,
+        response_body: "OK"
+      )
+
+      # Search should find the JSON log
+      results = model.search(q: "John")
+      _(results).must_include json_log
+      _(results).wont_include text_log
+    end
+  end
+
   describe "consistent interface" do
     it "provides consistent hash interface regardless of storage format" do
       request_data = {

@@ -45,16 +45,41 @@ test_files=(
     "test/test_outbound_http_logger.rb"
 )
 
+# Determine which databases to test
+databases_to_test=("sqlite3")
+if [[ -n "${TEST_POSTGRESQL:-}" ]] || [[ -n "${DATABASE_URL:-}" ]]; then
+    databases_to_test+=("postgresql")
+fi
+
 all_tests_passed=true
-for test_file in "${test_files[@]}"; do
-    if [[ -f "$test_file" ]]; then
-        print_status $BLUE "Running $test_file..."
-        if ! bundle exec ruby -Ilib:test "$test_file"; then
-            print_status $RED "❌ $test_file failed"
-            all_tests_passed=false
+for database in "${databases_to_test[@]}"; do
+    print_header "Running Tests with $database"
+
+    # Set environment variables for database
+    if [[ "$database" == "postgresql" ]]; then
+        export DATABASE_ADAPTER="postgresql"
+        if [[ -z "${DATABASE_URL:-}" ]]; then
+            export DATABASE_URL="postgresql://postgres:@localhost:5432/outbound_http_logger_test"
         fi
+    else
+        export DATABASE_ADAPTER="sqlite3"
+        unset DATABASE_URL
     fi
+
+    for test_file in "${test_files[@]}"; do
+        if [[ -f "$test_file" ]]; then
+            print_status $BLUE "Running $test_file with $database..."
+            if ! bundle exec ruby -Ilib:test "$test_file"; then
+                print_status $RED "❌ $test_file failed with $database"
+                all_tests_passed=false
+            fi
+        fi
+    done
 done
+
+# Clean up environment variables
+unset DATABASE_ADAPTER
+unset DATABASE_URL
 
 if $all_tests_passed; then
     print_status $GREEN "✅ All tests passed"

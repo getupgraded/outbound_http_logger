@@ -13,7 +13,22 @@ jobs:
       matrix:
         ruby-version: ['3.2', '3.3', '3.4']
         rails-version: ['7.2.0', '8.0.2']
+        database: ['sqlite3', 'postgresql']
     
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: outbound_http_logger_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -31,6 +46,9 @@ jobs:
           bundle install --jobs 4 --retry 3
 
       - name: Run tests
+        env:
+          DATABASE_ADAPTER: ${{ matrix.database }}
+          DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql://postgres:postgres@localhost:5432/outbound_http_logger_test' || '' }}
         run: |
           # Run tests individually to avoid interference issues
           bundle exec ruby -Ilib:test test/patches/test_net_http_patch.rb

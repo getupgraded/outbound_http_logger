@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Test script for running tests against multiple databases
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+print_header() {
+    echo -e "\n${BLUE}=== $1 ===${NC}"
+}
+
+print_status() {
+    echo -e "$1"
+}
+
+# Check if we're in the right directory
+if [[ ! -f "outbound_http_logger.gemspec" ]]; then
+    print_status "${RED}❌ Error: Not in outbound_http_logger gem directory${NC}"
+    exit 1
+fi
+
+# Install dependencies
+print_header "Installing Dependencies"
+bundle install
+
+# Test files to run
+test_files=(
+    "test/patches/test_net_http_patch.rb"
+    "test/concerns/test_outbound_logging.rb"
+    "test/integration/test_loggable_integration.rb"
+    "test/models/test_outbound_request_log.rb"
+    "test/test_outbound_http_logger.rb"
+    "test/test_database_adapters.rb"
+)
+
+# Check if test files exist
+missing_files=()
+for test_file in "${test_files[@]}"; do
+    if [[ ! -f "$test_file" ]]; then
+        missing_files+=("$test_file")
+    fi
+done
+
+if [[ ${#missing_files[@]} -gt 0 ]]; then
+    print_status "${YELLOW}⚠️  Some test files are missing:${NC}"
+    for file in "${missing_files[@]}"; do
+        print_status "${YELLOW}    - $file${NC}"
+    done
+    print_status "${YELLOW}    Continuing with available test files...${NC}"
+fi
+
+# Databases to test
+databases=("sqlite3" "postgresql")
+
+all_tests_passed=true
+
+for database in "${databases[@]}"; do
+    print_header "Testing with $database"
+    
+    # Set environment variables for database
+    if [[ "$database" == "postgresql" ]]; then
+        export DATABASE_ADAPTER="postgresql"
+        if [[ -z "${DATABASE_URL:-}" ]]; then
+            export DATABASE_URL="postgresql://postgres:@localhost:5432/outbound_http_logger_test"
+        fi
+
+        # Check if PostgreSQL is available
+        if ! command -v psql &> /dev/null; then
+            print_status "${YELLOW}⚠️  PostgreSQL not found, skipping PostgreSQL tests${NC}"
+            print_status "${YELLOW}    Install PostgreSQL to run these tests${NC}"
+            continue
+        fi
+
+        # Check if pg gem is available
+        if ! bundle exec ruby -e "require 'pg'" &> /dev/null; then
+            print_status "${YELLOW}⚠️  pg gem not available, skipping PostgreSQL tests${NC}"
+            print_status "${YELLOW}    Run: bundle install to install required gems${NC}"
+            continue
+        fi
+
+        # Try to connect to the database
+        if ! psql "$DATABASE_URL" -c "SELECT 1;" &> /dev/null; then
+            print_status "${YELLOW}⚠️  Cannot connect to PostgreSQL database, skipping PostgreSQL tests${NC}"
+            print_status "${YELLOW}    Make sure PostgreSQL is running and the database exists:${NC}"
+            print_status "${YELLOW}    createdb outbound_http_logger_test${NC}"
+            print_status "${YELLOW}    Or set DATABASE_URL environment variable${NC}"
+            continue
+        fi
+
+        # Clean up any existing tables
+        print_status "${BLUE}Cleaning up existing PostgreSQL tables...${NC}"
+        psql "$DATABASE_URL" -c "DROP TABLE IF EXISTS outbound_request_logs;" &> /dev/null
+
+        # Verify database connection and show version
+        pg_version=$(psql "$DATABASE_URL" -t -c "SELECT version();" 2>/dev/null | head -1 | xargs)
+        print_status "${GREEN}✅ Connected to PostgreSQL: ${pg_version:0:50}...${NC}"
+    else
+        export DATABASE_ADAPTER="sqlite3"
+        unset DATABASE_URL
+
+        # Check if SQLite3 gem is available
+        if ! bundle exec ruby -e "require 'sqlite3'" &> /dev/null; then
+            print_status "${RED}❌ sqlite3 gem not available${NC}"
+            print_status "${RED}    Run: bundle install to install required gems${NC}"
+            all_tests_passed=false
+            continue
+        fi
+
+        print_status "${GREEN}✅ Using SQLite3 for testing${NC}"
+    fi
+    
+    database_tests_passed=true
+    test_count=0
+    passed_count=0
+
+    for test_file in "${test_files[@]}"; do
+        if [[ -f "$test_file" ]]; then
+            test_count=$((test_count + 1))
+            print_status "${BLUE}Running $test_file with $database...${NC}"
+
+            # Clean up PostgreSQL table before each test file
+            if [[ "$database" == "postgresql" ]]; then
+                psql "$DATABASE_URL" -c "DROP TABLE IF EXISTS outbound_request_logs;" &> /dev/null
+            fi
+
+            # Run the test with timeout to prevent hanging
+            if timeout 300 bundle exec ruby -Ilib:test "$test_file"; then
+                print_status "${GREEN}✅ $test_file passed${NC}"
+                passed_count=$((passed_count + 1))
+            else
+                exit_code=$?
+                if [[ $exit_code -eq 124 ]]; then
+                    print_status "${RED}❌ $test_file timed out (5 minutes)${NC}"
+                else
+                    print_status "${RED}❌ $test_file failed with exit code $exit_code${NC}"
+                fi
+                database_tests_passed=false
+                all_tests_passed=false
+            fi
+        else
+            print_status "${YELLOW}⚠️  Skipping missing file: $test_file${NC}"
+        fi
+    done
+
+    print_status "${BLUE}Database $database results: $passed_count/$test_count tests passed${NC}"
+    
+    if $database_tests_passed; then
+        print_status "${GREEN}✅ All tests passed with $database${NC}"
+    else
+        print_status "${RED}❌ Some tests failed with $database${NC}"
+    fi
+done
+
+# Clean up environment variables
+unset DATABASE_ADAPTER
+unset DATABASE_URL
+
+print_header "Final Summary"
+if $all_tests_passed; then
+    print_status "${GREEN}🎉 All tests passed across all databases!${NC}"
+    print_status "${GREEN}   The outbound_http_logger gem is working correctly with both SQLite and PostgreSQL${NC}"
+    exit 0
+else
+    print_status "${RED}💥 Some tests failed${NC}"
+    print_status "${RED}   Please check the output above for details${NC}"
+    print_status "${RED}   Common issues:${NC}"
+    print_status "${RED}   - Database not running or accessible${NC}"
+    print_status "${RED}   - Missing database gems (sqlite3, pg)${NC}"
+    print_status "${RED}   - Database permissions or configuration${NC}"
+    exit 1
+fi

@@ -2,20 +2,66 @@
 
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
+# Load environment variables for testing
+begin
+  require "dotenv"
+  Dotenv.load(".env.test")
+rescue LoadError
+  # dotenv not available, continue without it
+end
+
 require "minitest/autorun"
 require "minitest/spec"
 require "mocha/minitest"
 require "webmock/minitest"
 require "active_record"
-require "sqlite3"
+
+# Load database adapters based on configuration
+database_adapter = ENV.fetch("DATABASE_ADAPTER", "sqlite3")
+case database_adapter
+when "sqlite3"
+  require "sqlite3"
+when "postgresql"
+  require "pg"
+else
+  raise "Unsupported database adapter: #{database_adapter}"
+end
 
 require "outbound_http_logger"
 
-# Set up in-memory SQLite database for testing
-ActiveRecord::Base.establish_connection(
-  adapter: 'sqlite3',
-  database: ':memory:'
-)
+# Set up database for testing based on environment
+def setup_test_database
+  database_adapter = ENV.fetch("DATABASE_ADAPTER", "sqlite3")
+  database_url = ENV["DATABASE_URL"]
+
+  case database_adapter
+  when "sqlite3"
+    ActiveRecord::Base.establish_connection(
+      adapter: 'sqlite3',
+      database: database_url || ':memory:'
+    )
+  when "postgresql"
+    if database_url
+      ActiveRecord::Base.establish_connection(database_url)
+    else
+      ActiveRecord::Base.establish_connection(
+        adapter: 'postgresql',
+        host: ENV.fetch("POSTGRES_HOST", "localhost"),
+        port: ENV.fetch("POSTGRES_PORT", "5432"),
+        database: ENV.fetch("POSTGRES_DB", "outbound_http_logger_test"),
+        username: ENV.fetch("POSTGRES_USER", "postgres"),
+        password: ENV["POSTGRES_PASSWORD"]
+      )
+    end
+  else
+    raise "Unsupported database adapter: #{database_adapter}"
+  end
+end
+
+setup_test_database
+
+# Load test utilities
+require 'outbound_http_logger/test'
 
 # Create the outbound_request_logs table
 ActiveRecord::Schema.define do
@@ -138,6 +184,110 @@ module TestHelpers
     OutboundHttpLogger.with_configuration(**overrides) do
       yield
     end
+  end
+
+  # New adapter-based test helpers
+  # These provide better isolation and are recommended for new tests
+
+  # Setup test logging with adapter pattern (recommended)
+  def setup_outbound_http_logger_test(database_url: nil, adapter: :sqlite)
+    OutboundHttpLogger::Test.configure(database_url: database_url, adapter: adapter)
+    OutboundHttpLogger::Test.enable!
+    OutboundHttpLogger::Test.clear_logs!
+  end
+
+  # Teardown test logging with adapter pattern
+  def teardown_outbound_http_logger_test
+    OutboundHttpLogger::Test.reset!
+  end
+
+  # Backup current configuration state
+  def backup_outbound_http_logger_configuration
+    OutboundHttpLogger::Test.backup_configuration
+  end
+
+  # Restore configuration from backup
+  def restore_outbound_http_logger_configuration(backup)
+    OutboundHttpLogger::Test.restore_configuration(backup)
+  end
+
+  # Execute a block with modified configuration, then restore original
+  def with_outbound_http_logger_configuration(**options, &block)
+    OutboundHttpLogger::Test.with_configuration(**options, &block)
+  end
+
+  # Setup test with isolated configuration (recommended for most tests)
+  def setup_outbound_http_logger_test_with_isolation(database_url: nil, adapter: :sqlite, **config_options)
+    # Backup original configuration
+    @outbound_http_logger_config_backup = backup_outbound_http_logger_configuration
+
+    # Setup test logging
+    setup_outbound_http_logger_test(database_url: database_url, adapter: adapter)
+
+    # Apply configuration options if provided
+    return if config_options.empty?
+
+    with_outbound_http_logger_configuration(**config_options) do
+      # Configuration is applied within this block
+    end
+  end
+
+  # Teardown test with configuration restoration
+  def teardown_outbound_http_logger_test_with_isolation
+    teardown_outbound_http_logger_test
+    restore_outbound_http_logger_configuration(@outbound_http_logger_config_backup) if @outbound_http_logger_config_backup
+    @outbound_http_logger_config_backup = nil
+  end
+
+  # Assert that a request was logged using the adapter pattern
+  def assert_outbound_request_logged_with_adapter(method, url, status: nil)
+    logs = OutboundHttpLogger::Test.all_logs.select do |log|
+      log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
+    end
+
+    assert !logs.empty?, "Expected outbound request to be logged: #{method.upcase} #{url}"
+    logs.first
+  end
+
+  # Assert request count using the adapter pattern
+  def assert_outbound_request_count_with_adapter(expected_count, criteria = {})
+    actual_count = if criteria.empty?
+                     OutboundHttpLogger::Test.logs_count
+                   else
+                     OutboundHttpLogger::Test.logs_matching(criteria).count
+                   end
+
+    assert_equal expected_count, actual_count, "Expected #{expected_count} outbound requests, got #{actual_count}"
+  end
+
+  # Helper to check if PostgreSQL is available for testing
+  def postgresql_available?
+    require 'pg'
+    true
+  rescue LoadError
+    false
+  end
+
+  # Helper to check if PostgreSQL test database is available
+  def postgresql_test_database_available?
+    return false unless postgresql_available?
+
+    database_url = ENV['OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
+                   ENV['DATABASE_URL'] ||
+                   'postgresql://postgres:@localhost:5432/outbound_http_logger_test'
+
+    uri = URI.parse(database_url)
+    conn = PG.connect(
+      host: uri.host,
+      port: uri.port || 5432,
+      dbname: uri.path[1..], # Remove leading slash
+      user: uri.user,
+      password: uri.password
+    )
+    conn.close
+    true
+  rescue StandardError
+    false
   end
 end
 

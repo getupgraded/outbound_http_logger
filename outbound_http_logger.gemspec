@@ -38,6 +38,8 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rubocop-rake", "~> 0.7"
   spec.add_development_dependency "rubocop-thread_safety", "~> 0.7"
   spec.add_development_dependency "sqlite3", ">= 2.1"
+  spec.add_development_dependency "pg", "~> 1.5"
+  spec.add_development_dependency "dotenv", "~> 3.0"
   spec.add_development_dependency "webmock", "~> 3.0"
   spec.add_development_dependency "faraday", "~> 2.0"
   spec.add_development_dependency "httparty", "~> 0.20"

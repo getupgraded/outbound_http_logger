@@ -5,82 +5,107 @@ require 'active_record'
 module OutboundHttpLogger
   module Test
     class << self
-      # Configure test logging with a specific database
+      # Configure test logging with a separate database
       def configure(database_url: nil, adapter: :sqlite)
-        database_url ||= default_test_database_url
-        OutboundHttpLogger.configuration.configure_secondary_database(database_url, adapter: adapter)
-        setup_test_database
+        @test_adapter = create_adapter(database_url, adapter)
+        @test_adapter&.establish_connection
       end
 
       # Enable test logging
       def enable!
-        OutboundHttpLogger.enable!
+        configure unless @test_adapter
+        @enabled = true
       end
 
       # Disable test logging
       def disable!
-        OutboundHttpLogger.disable!
+        @enabled = false
+      end
+
+      # Check if test logging is enabled
+      def enabled?
+        @enabled && @test_adapter&.enabled?
       end
 
       # Reset test configuration
       def reset!
         disable!
-        OutboundHttpLogger.configuration.clear_secondary_database
         clear_logs!
+        @test_adapter = nil
       end
 
       # Clear all test logs
       def clear_logs!
-        OutboundHttpLogger::Models::OutboundRequestLog.delete_all
+        return unless enabled?
+
+        @test_adapter.clear_logs
       rescue StandardError => e
-        # Ignore errors if table doesn't exist
         OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger::Test: Error clearing logs: #{e.message}")
       end
 
       # Count total logs
       def logs_count
-        OutboundHttpLogger::Models::OutboundRequestLog.count
+        return 0 unless enabled?
+
+        @test_adapter.count_logs
       rescue StandardError
         0
       end
 
       # Get logs with specific status
       def logs_with_status(status)
-        OutboundHttpLogger::Models::OutboundRequestLog.with_status(status)
+        return [] unless enabled?
+
+        @test_adapter.model_class.with_status(status)
       rescue StandardError
         []
       end
 
       # Get logs for specific URL pattern
       def logs_for_url(url_pattern)
-        OutboundHttpLogger::Models::OutboundRequestLog.where('url LIKE ?', "%#{url_pattern}%")
+        return [] unless enabled?
+
+        @test_adapter.count_logs_for_url(url_pattern)
       rescue StandardError
         []
       end
 
       # Get all logs
       def all_logs
-        OutboundHttpLogger::Models::OutboundRequestLog.all
+        return [] unless enabled?
+
+        @test_adapter.all_logs
       rescue StandardError
         []
       end
 
       # Get logs matching criteria
       def logs_matching(criteria = {})
-        OutboundHttpLogger::Models::OutboundRequestLog.search(criteria)
+        return [] unless enabled?
+
+        @test_adapter.model_class.search(criteria)
       rescue StandardError
         []
       end
 
+      # Log a request directly (for testing)
+      def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
+        return nil unless enabled?
+
+        @test_adapter.log_request(method, url, request_data, response_data, duration_seconds, options)
+      end
+
       # Analyze logs and return statistics
       def analyze
+        return { total: 0, successful: 0, failed: 0, success_rate: 0.0, average_duration: 0.0 } unless enabled?
+
         total = logs_count
         return { total: 0, successful: 0, failed: 0, success_rate: 0.0, average_duration: 0.0 } if total.zero?
 
-        successful = OutboundHttpLogger::Models::OutboundRequestLog.successful.count
-        failed = OutboundHttpLogger::Models::OutboundRequestLog.failed.count
+        successful = @test_adapter.model_class.successful.count
+        failed = @test_adapter.model_class.failed.count
         success_rate = (successful.to_f / total * 100).round(2)
-        average_duration = OutboundHttpLogger::Models::OutboundRequestLog.average(:duration_ms)&.round(2) || 0.0
+        average_duration = @test_adapter.model_class.average(:duration_ms)&.round(2) || 0.0
 
         {
           total: total,
@@ -93,108 +118,119 @@ module OutboundHttpLogger
         { total: 0, successful: 0, failed: 0, success_rate: 0.0, average_duration: 0.0 }
       end
 
+      # Get all formatted calls (for compatibility with inbound_http_logger)
+      def all_calls
+        return [] unless enabled?
+
+        @test_adapter.all_logs.map { |log| "#{log.http_method} #{log.url}" }
+      rescue StandardError
+        []
+      end
+
+      # Backup current configuration state
+      def backup_configuration
+        OutboundHttpLogger.configuration.backup
+      end
+
+      # Restore configuration from backup
+      def restore_configuration(backup)
+        OutboundHttpLogger.configuration.restore(backup)
+      end
+
+      # Execute a block with modified configuration, then restore original
+      def with_configuration(**options, &block)
+        OutboundHttpLogger.with_configuration(**options, &block)
+      end
+
       private
 
-        def default_test_database_url
-          'sqlite3:///tmp/test_outbound_requests.sqlite3'
-        end
+        def create_adapter(database_url, adapter_type)
+          database_url ||= default_test_database_url(adapter_type)
 
-        def setup_test_database
-          return unless OutboundHttpLogger.configuration.secondary_database_configured?
-
-          # Create table if it doesn't exist
-          begin
-            unless OutboundHttpLogger::Models::OutboundRequestLog.table_exists?
-              create_test_table
-            end
-          rescue StandardError => e
-            OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger::Test: Error setting up database: #{e.message}")
-          end
-        end
-
-        def create_test_table
-          connection = OutboundHttpLogger::Models::OutboundRequestLog.connection
-
-          # Create table based on adapter
-          if connection.adapter_name == 'PostgreSQL'
-            create_postgresql_table(connection)
+          case adapter_type.to_sym
+          when :sqlite
+            require_relative 'database_adapters/sqlite_adapter'
+            DatabaseAdapters::SqliteAdapter.new(database_url, :outbound_http_logger_test)
+          when :postgresql
+            require_relative 'database_adapters/postgresql_adapter'
+            DatabaseAdapters::PostgresqlAdapter.new(database_url, :outbound_http_logger_test)
           else
-            create_sqlite_table(connection)
+            raise ArgumentError, "Unsupported adapter: #{adapter_type}"
           end
         end
 
-        def create_postgresql_table(connection)
-          connection.execute(<<~SQL)
-            CREATE TABLE IF NOT EXISTS outbound_request_logs (
-              id BIGSERIAL PRIMARY KEY,
-              http_method VARCHAR(10) NOT NULL,
-              url TEXT NOT NULL,
-              status_code INTEGER NOT NULL,
-              request_headers JSONB DEFAULT '{}',
-              request_body JSONB,
-              response_headers JSONB DEFAULT '{}',
-              response_body JSONB,
-              duration_seconds DECIMAL(10,6),
-              duration_ms DECIMAL(10,2),
-              loggable_type VARCHAR(255),
-              loggable_id BIGINT,
-              metadata JSONB DEFAULT '{}',
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            )
-          SQL
-
-          # Create essential indexes only
-          connection.execute("CREATE INDEX IF NOT EXISTS idx_outbound_logs_created_at ON outbound_request_logs (created_at)")
-          connection.execute("CREATE INDEX IF NOT EXISTS idx_outbound_logs_loggable ON outbound_request_logs (loggable_type, loggable_id)")
+        def default_test_database_url(adapter_type = :sqlite)
+          case adapter_type.to_sym
+          when :sqlite
+            'sqlite3:///tmp/test_outbound_requests.sqlite3'
+          when :postgresql
+            ENV['OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] || 'postgresql://localhost/outbound_http_logger_test'
+          else
+            raise ArgumentError, "No default URL for adapter: #{adapter_type}"
+          end
         end
 
-        def create_sqlite_table(connection)
-          connection.execute(<<~SQL)
-            CREATE TABLE IF NOT EXISTS outbound_request_logs (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              http_method VARCHAR(10) NOT NULL,
-              url TEXT NOT NULL,
-              status_code INTEGER NOT NULL,
-              request_headers TEXT DEFAULT '{}',
-              request_body TEXT,
-              response_headers TEXT DEFAULT '{}',
-              response_body TEXT,
-              duration_seconds REAL,
-              duration_ms REAL,
-              loggable_type VARCHAR(255),
-              loggable_id INTEGER,
-              metadata TEXT DEFAULT '{}',
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          SQL
 
-          # Create essential indexes only
-          connection.execute("CREATE INDEX IF NOT EXISTS idx_outbound_logs_created_at ON outbound_request_logs (created_at)")
-          connection.execute("CREATE INDEX IF NOT EXISTS idx_outbound_logs_loggable ON outbound_request_logs (loggable_type, loggable_id)")
-        end
     end
 
     # Test helpers module for inclusion in test classes
     module Helpers
+      # Setup test logging
       def setup_outbound_http_logger_test(database_url: nil, adapter: :sqlite)
         OutboundHttpLogger::Test.configure(database_url: database_url, adapter: adapter)
         OutboundHttpLogger::Test.enable!
         OutboundHttpLogger::Test.clear_logs!
       end
 
+      # Teardown test logging
       def teardown_outbound_http_logger_test
         OutboundHttpLogger::Test.reset!
       end
 
+      # Backup current configuration state
+      def backup_outbound_http_logger_configuration
+        OutboundHttpLogger::Test.backup_configuration
+      end
+
+      # Restore configuration from backup
+      def restore_outbound_http_logger_configuration(backup)
+        OutboundHttpLogger::Test.restore_configuration(backup)
+      end
+
+      # Execute a block with modified configuration, then restore original
+      def with_outbound_http_logger_configuration(**options, &block)
+        OutboundHttpLogger::Test.with_configuration(**options, &block)
+      end
+
+      # Setup test with isolated configuration (recommended for most tests)
+      def setup_outbound_http_logger_test_with_isolation(database_url: nil, adapter: :sqlite, **config_options)
+        # Backup original configuration
+        @outbound_http_logger_config_backup = backup_outbound_http_logger_configuration
+
+        # Setup test logging
+        setup_outbound_http_logger_test(database_url: database_url, adapter: adapter)
+
+        # Apply configuration options if provided
+        return if config_options.empty?
+
+        with_outbound_http_logger_configuration(**config_options) do
+          # Configuration is applied within this block
+        end
+      end
+
+      # Teardown test with configuration restoration
+      def teardown_outbound_http_logger_test_with_isolation
+        teardown_outbound_http_logger_test
+        restore_outbound_http_logger_configuration(@outbound_http_logger_config_backup) if @outbound_http_logger_config_backup
+        @outbound_http_logger_config_backup = nil
+      end
+
       def assert_outbound_request_logged(method, url, status: nil)
-        logs = OutboundHttpLogger::Models::OutboundRequestLog.where(
-          http_method: method.to_s.upcase,
-          url: url
-        )
+        logs = OutboundHttpLogger::Test.all_logs.select do |log|
+          log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
+        end
 
-        logs = logs.where(status_code: status) if status
-
-        assert logs.exists?, "Expected outbound request to be logged: #{method.upcase} #{url}"
+        assert !logs.empty?, "Expected outbound request to be logged: #{method.upcase} #{url}"
         logs.first
       end
 
@@ -214,14 +250,6 @@ module OutboundHttpLogger
 
         assert_in_delta expected_rate, actual_rate, tolerance,
                         "Expected success rate of #{expected_rate}%, got #{actual_rate}%"
-      end
-
-      # Thread-safe configuration override for simple attribute changes
-      # This is the recommended method for parallel testing
-      def with_thread_safe_configuration(**overrides)
-        OutboundHttpLogger.with_configuration(**overrides) do
-          yield
-        end
       end
     end
   end

@@ -598,6 +598,54 @@ bundle install
 bundle exec rake test
 ```
 
+#### Testing Against Multiple Databases
+
+The gem supports testing against both SQLite and PostgreSQL databases. By default, tests run against an in-memory SQLite database.
+
+**SQLite Testing (default):**
+```bash
+bundle exec rake test
+# or
+DATABASE_ADAPTER=sqlite3 bundle exec rake test
+```
+
+**PostgreSQL Testing:**
+
+1. Set up a PostgreSQL database:
+```bash
+createdb outbound_http_logger_test
+```
+
+2. Create a `.env.test` file (copy from `.env.test.example`):
+```bash
+cp .env.test.example .env.test
+```
+
+3. Configure your `.env.test` file:
+```bash
+DATABASE_ADAPTER=postgresql
+DATABASE_URL=postgresql://postgres:@localhost:5432/outbound_http_logger_test
+```
+
+4. Run tests:
+```bash
+bundle exec rake test
+# or explicitly
+DATABASE_ADAPTER=postgresql bundle exec rake test
+```
+
+**Testing Both Databases:**
+```bash
+# Test SQLite first
+DATABASE_ADAPTER=sqlite3 bundle exec rake test
+
+# Then test PostgreSQL
+DATABASE_ADAPTER=postgresql bundle exec rake test
+
+# Or use the convenience script to test both automatically
+./bin/test-databases
+```
+
 ### Running CI Checks Locally
 
 Use the provided CI script to run all checks locally:
@@ -607,11 +655,20 @@ Use the provided CI script to run all checks locally:
 ```
 
 This script runs:
-- Tests with Minitest
+- Tests with Minitest (SQLite by default)
 - RuboCop linting
 - Gem building and validation
 - Security audit with bundler-audit
 - TODO/FIXME comment detection
+
+**Testing with PostgreSQL in CI script:**
+```bash
+# Set environment variable to test PostgreSQL as well
+TEST_POSTGRESQL=1 ./bin/ci
+
+# Or with custom database URL
+DATABASE_URL=postgresql://user:pass@localhost/test_db ./bin/ci
+```
 
 ### Continuous Integration
 
@@ -620,7 +677,7 @@ The gem includes GitHub Actions workflows that automatically run on:
 - Pull requests targeting `develop` or `main` branches (when gem files change)
 
 The CI pipeline includes:
-- **Test Job**: Runs tests against Ruby 3.2, 3.3, and 3.4 on Rails 7.2 and 8.0.2
+- **Test Job**: Runs tests against Ruby 3.2, 3.3, and 3.4 on Rails 7.2 and 8.0.2 with both SQLite and PostgreSQL databases
 - **Build Job**: Validates gem can be built successfully
 - **Quality Job**: Runs RuboCop linting and validates gemspec
 - **Security Job**: Runs bundler-audit for dependency vulnerabilities
