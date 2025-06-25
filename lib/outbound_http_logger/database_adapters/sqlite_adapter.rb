@@ -10,12 +10,6 @@ module OutboundHttpLogger
       included do
         # SQLite-specific scopes and methods
         class << self
-            def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
-              log_data = build_log_data(method, url, request_data, response_data, duration_seconds, options)
-              return nil unless log_data
-
-              create!(log_data)
-            end
 
             # SQLite-specific text search
             def apply_text_search(scope, q, original_query)
@@ -56,40 +50,6 @@ module OutboundHttpLogger
             end
 
             private
-
-              def build_log_data(method, url, request_data, response_data, duration_seconds, options)
-                return nil unless OutboundHttpLogger.enabled?
-                return nil unless OutboundHttpLogger.configuration.should_log_url?(url)
-
-                # Check content type filtering
-                content_type = response_data[:headers]&.[]('content-type') ||
-                               response_data[:headers]&.[]('Content-Type')
-                return nil unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
-
-                duration_ms = (duration_seconds * 1000).round(2)
-
-                # Get thread-local metadata and loggable
-                thread_metadata = Thread.current[:outbound_http_logger_metadata] || {}
-                thread_loggable = Thread.current[:outbound_http_logger_loggable]
-
-                # Merge metadata
-                merged_metadata = thread_metadata.merge(request_data[:metadata] || {}).merge(options[:metadata] || {})
-
-                # For SQLite, ensure JSON fields are properly serialized
-                {
-                  http_method: method.to_s.upcase,
-                  url: url,
-                  status_code: response_data[:status_code] || 0,
-                  request_headers: serialize_json_field(OutboundHttpLogger.configuration.filter_headers(request_data[:headers] || {})),
-                  request_body: serialize_json_field(OutboundHttpLogger.configuration.filter_body(request_data[:body])),
-                  response_headers: serialize_json_field(OutboundHttpLogger.configuration.filter_headers(response_data[:headers] || {})),
-                  response_body: serialize_json_field(OutboundHttpLogger.configuration.filter_body(response_data[:body])),
-                  duration_seconds: duration_seconds,
-                  duration_ms: duration_ms,
-                  loggable: request_data[:loggable] || thread_loggable,
-                  metadata: serialize_json_field(merged_metadata)
-                }
-              end
 
               def serialize_json_field(value)
                 return nil if value.nil?

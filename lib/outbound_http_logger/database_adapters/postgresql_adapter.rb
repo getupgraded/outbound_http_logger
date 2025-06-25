@@ -10,15 +10,6 @@ module OutboundHttpLogger
       included do
         # PostgreSQL-specific scopes and methods
         class << self
-          def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
-            log_data = build_log_data(method, url, request_data, response_data, duration_seconds, options)
-            return nil unless log_data
-
-            # For PostgreSQL, we can store JSON objects directly in JSONB columns
-            log_data = prepare_json_data_for_postgresql(log_data)
-
-            create!(log_data)
-          end
 
           # PostgreSQL-specific text search with JSONB support
           def apply_text_search(scope, q, original_query)
@@ -75,38 +66,7 @@ module OutboundHttpLogger
               log_data
             end
 
-            def build_log_data(method, url, request_data, response_data, duration_seconds, options)
-              return nil unless OutboundHttpLogger.enabled?
-              return nil unless OutboundHttpLogger.configuration.should_log_url?(url)
 
-              # Check content type filtering
-              content_type = response_data[:headers]&.[]('content-type') ||
-                             response_data[:headers]&.[]('Content-Type')
-              return nil unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
-
-              duration_ms = (duration_seconds * 1000).round(2)
-
-              # Get thread-local metadata and loggable
-              thread_metadata = Thread.current[:outbound_http_logger_metadata] || {}
-              thread_loggable = Thread.current[:outbound_http_logger_loggable]
-
-              # Merge metadata
-              merged_metadata = thread_metadata.merge(request_data[:metadata] || {}).merge(options[:metadata] || {})
-
-              {
-                http_method: method.to_s.upcase,
-                url: url,
-                status_code: response_data[:status_code] || 0,
-                request_headers: OutboundHttpLogger.configuration.filter_headers(request_data[:headers] || {}),
-                request_body: OutboundHttpLogger.configuration.filter_body(request_data[:body]),
-                response_headers: OutboundHttpLogger.configuration.filter_headers(response_data[:headers] || {}),
-                response_body: OutboundHttpLogger.configuration.filter_body(response_data[:body]),
-                duration_seconds: duration_seconds,
-                duration_ms: duration_ms,
-                loggable: request_data[:loggable] || thread_loggable,
-                metadata: merged_metadata
-              }
-            end
         end
 
         def build_create_table_sql

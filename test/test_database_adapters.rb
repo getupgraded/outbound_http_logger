@@ -94,7 +94,8 @@ describe "Database Adapters" do
   describe "Test utilities" do
     it "provides test configuration" do
       OutboundHttpLogger::Test.configure(
-        database_url: 'sqlite3:///tmp/test_outbound.sqlite3'
+        database_url: ':memory:',
+        adapter: :sqlite
       )
 
       OutboundHttpLogger::Test.enable!

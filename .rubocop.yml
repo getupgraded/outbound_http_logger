@@ -21,6 +21,9 @@ AllCops:
     - 'lib/outbound_http_logger/generators/templates/**/*'
 
 # Gem-specific overrides
+Rails/ApplicationRecord:
+  Enabled: false
+
 Style/Documentation:
   Enabled: true
   Exclude:
