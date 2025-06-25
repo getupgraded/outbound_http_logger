@@ -3,33 +3,57 @@
 module OutboundHttpLogger
   module Patches
     module HttppartyPatch
+      @mutex = Mutex.new
+      @applied = false
+
       def self.apply!
-        return if @applied
-        return unless defined?(HTTParty)
+        # Thread-safe patch application using mutex
+        @mutex.synchronize do
+          return if @applied
+          return unless defined?(HTTParty)
 
-        # Patch HTTParty::Request
-        HTTParty::Request.prepend(RequestMethods)
-        @applied = true
+          # Patch HTTParty::Request
+          HTTParty::Request.prepend(RequestMethods)
+          @applied = true
 
-        OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: HTTParty patch applied") if OutboundHttpLogger.configuration.debug_logging
+          OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: HTTParty patch applied") if OutboundHttpLogger.configuration.debug_logging
+        end
+      end
+
+      def self.applied?
+        @mutex.synchronize { @applied }
+      end
+
+      def self.reset!
+        @mutex.synchronize { @applied = false }
       end
 
       module RequestMethods
         def perform(&block)
+          # Get configuration first to check if logging is enabled
+          config = OutboundHttpLogger.configuration
+
           # Early exit if logging is disabled
-          return super unless OutboundHttpLogger.enabled?
+          return super unless config.enabled?
 
-          # Prevent infinite recursion
-          return super if Thread.current[:outbound_http_logger_in_httparty]
+          library_name = 'httparty'
 
-          Thread.current[:outbound_http_logger_in_httparty] = true
+          # Check for recursion and prevent infinite loops
+          if config.in_recursion?(library_name)
+            config.check_recursion_depth!(library_name) if config.strict_recursion_detection
+            return super
+          end
+
+          # Get the URL
+          url = uri.to_s
+
+          # Early exit if URL should be excluded (before setting recursion flag)
+          return super unless config.should_log_url?(url)
+
+          # Increment recursion depth with guaranteed cleanup
+          config.increment_recursion_depth(library_name)
 
           begin
-            # Get the URL
-            url = uri.to_s
-
-            # Early exit if URL should be excluded
-            return super unless OutboundHttpLogger.configuration.should_log_url?(url)
 
             # Capture request data
             request_data = {
@@ -51,19 +75,21 @@ module OutboundHttpLogger
               body: response.body
             }
 
-            # Early exit if content type should be excluded
+            # Check if content type should be excluded
             content_type = response_data[:headers]['content-type'] || response_data[:headers]['Content-Type']
-            return response unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+            should_log_content_type = OutboundHttpLogger.configuration.should_log_content_type?(content_type)
 
-            # Log the request
-            duration_seconds = end_time - start_time
-            OutboundHttpLogger.logger.log_completed_request(
-              http_method.name.split('::').last.upcase,
-              url,
-              request_data,
-              response_data,
-              duration_seconds
-            )
+            # Log the request only if content type is allowed
+            if should_log_content_type
+              duration_seconds = end_time - start_time
+              OutboundHttpLogger.logger.log_completed_request(
+                http_method.name.split('::').last.upcase,
+                url,
+                request_data,
+                response_data,
+                duration_seconds
+              )
+            end
 
             response
           rescue => e
@@ -95,7 +121,7 @@ module OutboundHttpLogger
 
             raise e
           ensure
-            Thread.current[:outbound_http_logger_in_httparty] = false
+            config.decrement_recursion_depth(library_name)
           end
         end
       end

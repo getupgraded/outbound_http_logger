@@ -34,42 +34,42 @@ describe OutboundHttpLogger do
   end
 
   describe "URL exclusion" do
-    before do
-      OutboundHttpLogger.enable!
-    end
-
     it "excludes Sentry URLs by default" do
-      sentry_url = "https://o1234567.ingest.us.sentry.io/api/10001/envelope/"
+      OutboundHttpLogger.with_configuration(enabled: true) do
+        sentry_url = "https://o1234567.ingest.us.sentry.io/api/10001/envelope/"
 
-      _(OutboundHttpLogger.configuration.should_log_url?(sentry_url)).must_equal false
+        _(OutboundHttpLogger.configuration.should_log_url?(sentry_url)).must_equal false
+      end
     end
 
     it "excludes health check URLs by default" do
-      health_url = "https://api.example.com/health"
+      OutboundHttpLogger.with_configuration(enabled: true) do
+        health_url = "https://api.example.com/health"
 
-      _(OutboundHttpLogger.configuration.should_log_url?(health_url)).must_equal false
+        _(OutboundHttpLogger.configuration.should_log_url?(health_url)).must_equal false
+      end
     end
 
     it "allows normal API URLs" do
-      api_url = "https://api.example.com/users"
+      OutboundHttpLogger.with_configuration(enabled: true) do
+        api_url = "https://api.example.com/users"
 
-      _(OutboundHttpLogger.configuration.should_log_url?(api_url)).must_equal true
+        _(OutboundHttpLogger.configuration.should_log_url?(api_url)).must_equal true
+      end
     end
 
     it "can add custom exclusion patterns" do
-      OutboundHttpLogger.configuration.excluded_urls << %r{/custom-exclude}
+      OutboundHttpLogger.with_configuration(enabled: true) do
+        OutboundHttpLogger.configuration.excluded_urls << %r{/custom-exclude}
 
-      excluded_url = "https://api.example.com/custom-exclude/test"
+        excluded_url = "https://api.example.com/custom-exclude/test"
 
-      _(OutboundHttpLogger.configuration.should_log_url?(excluded_url)).must_equal false
+        _(OutboundHttpLogger.configuration.should_log_url?(excluded_url)).must_equal false
+      end
     end
   end
 
   describe "content type filtering" do
-    before do
-      OutboundHttpLogger.enable!
-    end
-
     it "excludes HTML content by default" do
       _(OutboundHttpLogger.configuration.should_log_content_type?("text/html")).must_equal false
     end
@@ -89,10 +89,6 @@ describe OutboundHttpLogger do
   end
 
   describe "sensitive data filtering" do
-    before do
-      OutboundHttpLogger.enable!
-    end
-
     it "filters authorization headers" do
       headers  = { "Authorization" => "Bearer secret-token", "Content-Type" => "application/json" }
       filtered = OutboundHttpLogger.configuration.filter_headers(headers)

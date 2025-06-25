@@ -11,9 +11,12 @@ module OutboundHttpLogger
                   :debug_logging,
                   :logger,
                   :secondary_database_url,
-                  :secondary_database_adapter
+                  :secondary_database_adapter,
+                  :max_recursion_depth,
+                  :strict_recursion_detection
 
     def initialize
+      @mutex                  = Mutex.new
       @enabled                = false
       @excluded_urls          = [
         %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
@@ -55,6 +58,10 @@ module OutboundHttpLogger
       # Secondary database configuration
       @secondary_database_url = nil
       @secondary_database_adapter = :sqlite
+
+      # Recursion detection configuration
+      @max_recursion_depth = 3  # Maximum allowed recursion depth before raising error
+      @strict_recursion_detection = false  # Whether to raise errors on recursion detection
     end
 
     def enabled?
@@ -88,6 +95,55 @@ module OutboundHttpLogger
 
     def get_logger
       @logger || (defined?(Rails) ? Rails.logger : nil)
+    end
+
+    # Recursion detection and prevention
+    def check_recursion_depth!(library_name)
+      return unless @strict_recursion_detection
+
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      current_depth = Thread.current[depth_key] || 0
+
+      if current_depth >= @max_recursion_depth
+        error_msg = "OutboundHttpLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
+                   "This usually indicates that the HTTP library is being used within the logging process itself. " \
+                   "Check your logger configuration and database connection settings."
+
+        # Log the error if possible (but don't use HTTP logging!)
+        if get_logger && !Thread.current[:outbound_http_logger_logging_error]
+          Thread.current[:outbound_http_logger_logging_error] = true
+          begin
+            get_logger.error(error_msg)
+          ensure
+            Thread.current[:outbound_http_logger_logging_error] = false
+          end
+        end
+
+        raise OutboundHttpLogger::InfiniteRecursionError, error_msg
+      end
+    end
+
+    def increment_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      Thread.current[depth_key] = (Thread.current[depth_key] || 0) + 1
+    end
+
+    def decrement_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      current_depth = Thread.current[depth_key] || 0
+      new_depth = [current_depth - 1, 0].max
+
+      # Set to nil when depth reaches 0 to indicate no active recursion tracking
+      Thread.current[depth_key] = new_depth == 0 ? nil : new_depth
+    end
+
+    def current_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      Thread.current[depth_key] || 0
+    end
+
+    def in_recursion?(library_name)
+      current_recursion_depth(library_name) > 0
     end
 
     # Secondary database configuration
@@ -164,34 +220,42 @@ module OutboundHttpLogger
 
     public
 
-    # Create a backup of the current configuration state
+    # Create a backup of the current configuration state (thread-safe)
     def backup
-      {
-        enabled: @enabled,
-        excluded_urls: @excluded_urls.dup,
-        excluded_content_types: @excluded_content_types.dup,
-        sensitive_headers: @sensitive_headers.dup,
-        sensitive_body_keys: @sensitive_body_keys.dup,
-        max_body_size: @max_body_size,
-        debug_logging: @debug_logging,
-        logger: @logger,
-        secondary_database_url: @secondary_database_url,
-        secondary_database_adapter: @secondary_database_adapter
-      }
+      @mutex.synchronize do
+        {
+          enabled: @enabled,
+          excluded_urls: @excluded_urls.dup,
+          excluded_content_types: @excluded_content_types.dup,
+          sensitive_headers: @sensitive_headers.dup,
+          sensitive_body_keys: @sensitive_body_keys.dup,
+          max_body_size: @max_body_size,
+          debug_logging: @debug_logging,
+          logger: @logger,
+          secondary_database_url: @secondary_database_url,
+          secondary_database_adapter: @secondary_database_adapter,
+          max_recursion_depth: @max_recursion_depth,
+          strict_recursion_detection: @strict_recursion_detection
+        }
+      end
     end
 
-    # Restore configuration from a backup
+    # Restore configuration from a backup (thread-safe)
     def restore(backup)
-      @enabled = backup[:enabled]
-      @excluded_urls = backup[:excluded_urls]
-      @excluded_content_types = backup[:excluded_content_types]
-      @sensitive_headers = backup[:sensitive_headers]
-      @sensitive_body_keys = backup[:sensitive_body_keys]
-      @max_body_size = backup[:max_body_size]
-      @debug_logging = backup[:debug_logging]
-      @logger = backup[:logger]
-      @secondary_database_url = backup[:secondary_database_url]
-      @secondary_database_adapter = backup[:secondary_database_adapter]
+      @mutex.synchronize do
+        @enabled = backup[:enabled]
+        @excluded_urls = backup[:excluded_urls]
+        @excluded_content_types = backup[:excluded_content_types]
+        @sensitive_headers = backup[:sensitive_headers]
+        @sensitive_body_keys = backup[:sensitive_body_keys]
+        @max_body_size = backup[:max_body_size]
+        @debug_logging = backup[:debug_logging]
+        @logger = backup[:logger]
+        @secondary_database_url = backup[:secondary_database_url]
+        @secondary_database_adapter = backup[:secondary_database_adapter]
+        @max_recursion_depth = backup[:max_recursion_depth] if backup.key?(:max_recursion_depth)
+        @strict_recursion_detection = backup[:strict_recursion_detection] if backup.key?(:strict_recursion_detection)
+      end
     end
   end
 end

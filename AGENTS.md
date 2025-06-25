@@ -29,6 +29,101 @@ end
 
 **Rule**: Use `with_configuration` for temporary configuration changes in tests. This creates a complete configuration copy for the current thread.
 
+### 2. Thread-Safe Patch Application
+
+**Critical Production Safety**: All HTTP library patches use mutex synchronization to prevent race conditions during concurrent patch application:
+
+```ruby
+module NetHttpPatch
+  @mutex = Mutex.new
+  @applied = false
+
+  def self.apply!
+    @mutex.synchronize do
+      return if @applied
+      return unless defined?(Net::HTTP)
+
+      Net::HTTP.prepend(InstanceMethods)
+      @applied = true
+    end
+  end
+end
+```
+
+**Justification**: Without mutex protection, multiple threads could simultaneously check `@applied` (both see false) and both proceed to apply the patch, leading to multiple prepends and potential issues.
+
+### 3. Thread-Safe Configuration Backup/Restore
+
+Configuration backup and restore operations are protected by mutex to prevent race conditions:
+
+```ruby
+def backup
+  @mutex.synchronize do
+    { enabled: @enabled, excluded_urls: @excluded_urls.dup, ... }
+  end
+end
+
+def restore(backup)
+  @mutex.synchronize do
+    @enabled = backup[:enabled]
+    @excluded_urls = backup[:excluded_urls]
+    # ...
+  end
+end
+```
+
+**Rule**: All shared state modifications must be protected by appropriate synchronization mechanisms.
+
+### 4. Thread-Safe Configuration Initialization
+
+Global configuration initialization uses mutex protection to prevent race conditions:
+
+```ruby
+module OutboundHttpLogger
+  @config_mutex = Mutex.new
+
+  def self.global_configuration
+    @config_mutex.synchronize do
+      @configuration ||= Configuration.new
+    end
+  end
+end
+```
+
+**Critical Issue**: The `@configuration ||= Configuration.new` pattern is a classic check-then-act race condition. Multiple threads could simultaneously see `@configuration` as nil and both create new Configuration instances, leading to lost configuration state.
+
+**Rule**: All lazy initialization patterns must use proper synchronization to prevent race conditions in multi-threaded environments.
+
+### 5. Thread-Local Variable Leak Prevention
+
+**Critical Issue**: Early returns in HTTP patches can bypass `ensure` blocks, causing thread-local variable leaks:
+
+```ruby
+# BEFORE (THREAD-LOCAL LEAK)
+Thread.current[:outbound_http_logger_in_faraday] = true
+begin
+  # ... processing ...
+  return super unless should_log_url?(url)  # ⚠️ LEAK! ensure never reached
+ensure
+  Thread.current[:outbound_http_logger_in_faraday] = false  # Never executed
+end
+
+# AFTER (LEAK-PROOF)
+# Check conditions BEFORE setting thread-local variable
+return super unless should_log_url?(url)
+
+Thread.current[:outbound_http_logger_in_faraday] = true
+begin
+  # ... processing (no early returns) ...
+ensure
+  Thread.current[:outbound_http_logger_in_faraday] = false  # Always executed
+end
+```
+
+**Impact**: Thread-local variable leaks cause all subsequent requests in that thread to be silently skipped, leading to missing logs and test failures.
+
+**Rule**: Set thread-local variables only after all early-exit conditions are checked, or ensure cleanup always occurs regardless of exit path.
+
 ### 2. Thread-Local Storage
 
 ```ruby
@@ -313,6 +408,98 @@ return unless OutboundHttpLogger.enabled?
 
 **Rule**: Always check if logging is enabled before performing any logging-related work.
 
+## Systematic Debugging and Test Isolation
+
+### Test Isolation Debugging Methodology
+
+When tests fail when run together but pass individually, use systematic debugging:
+
+**❌ Don't**: Immediately revert to running tests individually
+**✅ Do**: Find the exact root cause through systematic investigation
+
+#### Debugging Process:
+
+1. **Test individual files** to confirm they work in isolation
+2. **Test pairs/combinations** to identify problematic interactions
+3. **Check configuration state** after each test file
+4. **Identify the specific conflict** (configuration, thread-local data, dependencies)
+5. **Fix the root cause** rather than masking with workarounds
+
+#### Common Test Isolation Issues:
+
+1. **Configuration Conflicts**:
+   ```ruby
+   # Problem: Tests leaving configuration in bad state
+   # Solution: Proper setup/teardown with reset_configuration!
+
+   def setup
+     OutboundHttpLogger.reset_configuration!
+   end
+
+   def teardown
+     OutboundHttpLogger.disable!
+     OutboundHttpLogger.clear_all_thread_data
+   end
+   ```
+
+2. **Logger Dependencies**:
+   ```ruby
+   # Problem: Tests enabling logging without setting proper logger
+   # Solution: Always set test logger to avoid Rails.logger fallback
+
+   def with_logging_enabled
+     OutboundHttpLogger.configure do |config|
+       config.enabled = true
+       config.logger = Logger.new(StringIO.new) unless config.logger
+     end
+     yield
+   ensure
+     OutboundHttpLogger.disable!
+   end
+   ```
+
+3. **Configuration Method Conflicts**:
+   ```ruby
+   # Problem: Mixing configuration approaches
+   OutboundHttpLogger.with_configuration(enabled: true) do
+     with_logging_enabled do  # This creates conflicts!
+
+   # Solution: Use single, consistent approach
+   OutboundHttpLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
+   ```
+
+### Test File Organization
+
+**Rakefile Pattern**:
+```ruby
+# ✅ Automatic test discovery (recommended)
+t.test_files = FileList["test/**/*test*.rb"].exclude(
+  "test/test_helper.rb",           # Helper file, not a test
+  "test/test_database_adapters.rb", # Requires Rails environment
+  "test/test_recursion_detection.rb" # Requires Rails.logger
+)
+
+# ❌ Manual test file lists (maintenance burden)
+t.test_files = ["test/patches/test_*.rb", "test/concerns/test_*.rb", ...]
+```
+
+**Benefits of automatic discovery**:
+- New test files are automatically included
+- No maintenance burden of updating file lists
+- Consistent with standard Ruby testing practices
+
+### Isolation Checking
+
+Enable strict isolation checking in CI:
+```bash
+STRICT_TEST_ISOLATION=true bundle exec rake test
+```
+
+This detects:
+- Leftover thread-local data
+- Configuration changes not properly cleaned up
+- State leakage between tests
+
 ## Common Pitfalls
 
 1. **Don't modify global configuration in tests** - Use `with_configuration` instead
@@ -333,5 +520,19 @@ return unless OutboundHttpLogger.enabled?
 3. **Check performance impact** - Measure overhead of logging operations
 4. **Validate security filtering** - Ensure sensitive data is properly filtered
 5. **Test database adapters** - Verify functionality across different database types
+
+## Summary
+
+This document captures the key design decisions and patterns used in OutboundHttpLogger. When working on this codebase:
+
+1. **Always prioritize production safety** - HTTP requests must never fail due to logging
+2. **Maintain thread safety** - Use proper synchronization and thread-local storage
+3. **Follow the adapter pattern** - Keep database logic isolated and testable
+4. **Use dependency injection** - Avoid direct Rails dependencies in core logic
+5. **Implement comprehensive error handling** - Log errors but never propagate them
+6. **Debug systematically** - Find root causes rather than masking with workarounds
+7. **Test thoroughly** - Use both unit tests and integration tests with real HTTP libraries
+
+The patterns documented here ensure the gem remains reliable, performant, and maintainable in production environments.
 
 This guide should be updated as new patterns emerge or existing patterns change.

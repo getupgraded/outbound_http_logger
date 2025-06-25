@@ -53,33 +53,32 @@ describe "Loggable Integration Tests" do
 
   describe "log_request with thread-local data" do
     it "includes thread-local metadata in logs" do
-      OutboundHttpLogger.enable!
-      with_logging_enabled do
-        # Set thread-local metadata (skip loggable for now due to ActiveRecord complexity)
-        metadata = { action: "api_call", source: "test", user_id: 123 }
-        OutboundHttpLogger.set_metadata(metadata)
+      OutboundHttpLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
+          # Set thread-local metadata (skip loggable for now due to ActiveRecord complexity)
+          metadata = { action: "api_call", source: "test", user_id: 123 }
+          OutboundHttpLogger.set_metadata(metadata)
 
-        # Manually call log_request to test the functionality
-        request_data = {
-          headers: { "Content-Type" => "application/json" },
-          body: '{"test": true}',
-          loggable: nil, # Skip complex loggable for this test
-          metadata: Thread.current[:outbound_http_logger_metadata]
-        }
+          # Manually call log_request to test the functionality
+          request_data = {
+            headers: { "Content-Type" => "application/json" },
+            body: '{"test": true}',
+            loggable: nil, # Skip complex loggable for this test
+            metadata: Thread.current[:outbound_http_logger_metadata]
+          }
 
-        response_data = {
-          status_code: 200,
-          headers: { "Content-Type" => "application/json" },
-          body: '{"success": true}'
-        }
+          response_data = {
+            status_code: 200,
+            headers: { "Content-Type" => "application/json" },
+            body: '{"success": true}'
+          }
 
-        log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
+          log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
 
-        _(log).wont_be_nil
-        _(log.loggable).must_be_nil
-        _(log.metadata["action"]).must_equal "api_call"
-        _(log.metadata["source"]).must_equal "test"
-        _(log.metadata["user_id"]).must_equal 123
+          _(log).wont_be_nil
+          _(log.loggable).must_be_nil
+          _(log.metadata["action"]).must_equal "api_call"
+          _(log.metadata["source"]).must_equal "test"
+          _(log.metadata["user_id"]).must_equal 123
       end
     end
 

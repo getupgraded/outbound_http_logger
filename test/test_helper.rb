@@ -13,6 +13,8 @@ end
 require "minitest/autorun"
 require "minitest/spec"
 require "mocha/minitest"
+require "logger"
+require "stringio"
 require "webmock/minitest"
 require "active_record"
 
@@ -91,47 +93,8 @@ end
 # Test helper methods
 module TestHelpers
   def setup
-    # Reset configuration to defaults but don't nil it
-    config                        = OutboundHttpLogger.configuration
-    config.enabled                = false
-    config.excluded_urls          = [
-      %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
-      %r{/health},                               # Health check endpoints
-      %r{/ping}                                  # Ping endpoints
-    ]
-    config.excluded_content_types = [
-      'text/html',
-      'text/css',
-      'text/javascript',
-      'application/javascript',
-      'image/',
-      'video/',
-      'audio/',
-      'font/'
-    ]
-    config.sensitive_headers = [
-      'authorization',
-      'cookie',
-      'set-cookie',
-      'x-api-key',
-      'x-auth-token',
-      'x-access-token',
-      'bearer'
-    ]
-    config.sensitive_body_keys = [
-      'password',
-      'secret',
-      'token',
-      'key',
-      'auth',
-      'credential',
-      'private'
-    ]
-    config.max_body_size          = 10_000
-    config.debug_logging          = false
-    config.logger                 = nil
-    # Reset logger
-    OutboundHttpLogger.instance_variable_set(:@logger, nil)
+    # Reset configuration to defaults
+    OutboundHttpLogger.reset_configuration!
 
     # Clear all logs
     OutboundHttpLogger::Models::OutboundRequestLog.delete_all
@@ -142,17 +105,124 @@ module TestHelpers
   end
 
   def teardown
-    # Disable logging
+    # Optional: Check for leftover thread-local data and configuration changes
+    # This helps identify tests that don't clean up properly
+    # Enable with: STRICT_TEST_ISOLATION=true
+    if ENV['STRICT_TEST_ISOLATION'] == 'true'
+      begin
+        assert_no_leftover_thread_data!
+        # Check configuration BEFORE we clean it up
+        assert_configuration_unchanged!
+      rescue => e
+        # Log the error but don't fail the test - just warn
+        puts "\n⚠️  #{e.message}"
+      end
+    end
+
+    # Disable logging (this modifies configuration, so check must be above)
     OutboundHttpLogger.disable!
 
-    # Clear thread-local variables
-    Thread.current[:outbound_http_logger_in_request]  = false
-    Thread.current[:outbound_http_logger_in_faraday]  = false
-    Thread.current[:outbound_http_logger_in_httparty] = false
+    # Clear thread-local data
+    OutboundHttpLogger.clear_all_thread_data
+  end
+
+  # Check for leftover thread-local data and raise descriptive errors
+  # This helps identify tests that don't clean up properly
+  def assert_no_leftover_thread_data!
+    leftover_data = {}
+
+    # Check all known OutboundHttpLogger thread-local variables
+    thread_vars = {
+      outbound_http_logger_config_override: Thread.current[:outbound_http_logger_config_override],
+      outbound_http_logger_loggable: Thread.current[:outbound_http_logger_loggable],
+      outbound_http_logger_metadata: Thread.current[:outbound_http_logger_metadata],
+      outbound_http_logger_in_faraday: Thread.current[:outbound_http_logger_in_faraday],
+      outbound_http_logger_logging_error: Thread.current[:outbound_http_logger_logging_error],
+      outbound_http_logger_depth_faraday: Thread.current[:outbound_http_logger_depth_faraday],
+      outbound_http_logger_depth_net_http: Thread.current[:outbound_http_logger_depth_net_http],
+      outbound_http_logger_depth_httparty: Thread.current[:outbound_http_logger_depth_httparty],
+      outbound_http_logger_depth_test: Thread.current[:outbound_http_logger_depth_test],
+      outbound_http_logger_in_request: Thread.current[:outbound_http_logger_in_request]
+    }
+
+    thread_vars.each do |key, value|
+      leftover_data[key] = value unless value.nil?
+    end
+
+    return if leftover_data.empty?
+
+    # Build descriptive error message
+    error_details = leftover_data.map do |key, value|
+      "  #{key}: #{value.inspect}"
+    end.join("\n")
+
+    raise <<~ERROR
+      Test isolation failure: Leftover thread-local data detected!
+
+      The following thread-local variables were not cleaned up:
+      #{error_details}
+
+      This indicates that a test is not properly cleaning up after itself.
+      Each test should ensure all thread-local data is cleared in its teardown.
+
+      To fix this:
+      1. Add proper cleanup in the test's teardown method
+      2. Use OutboundHttpLogger.clear_thread_data or clear specific variables
+      3. Ensure with_configuration blocks properly restore state
+
+      This check helps maintain test isolation and prevents flaky tests.
+    ERROR
+  end
+
+  # Check if configuration has been changed from defaults
+  # This helps identify tests that modify global configuration without cleanup
+  def assert_configuration_unchanged!
+    current_config = OutboundHttpLogger.global_configuration
+    default_config = OutboundHttpLogger.create_fresh_configuration
+
+    changes = []
+
+    # Compare key configuration values (skip 'enabled' since tests commonly change this)
+    config_checks = {
+      excluded_urls: [current_config.excluded_urls, default_config.excluded_urls],
+      excluded_content_types: [current_config.excluded_content_types, default_config.excluded_content_types],
+      sensitive_headers: [current_config.sensitive_headers, default_config.sensitive_headers],
+      sensitive_body_keys: [current_config.sensitive_body_keys, default_config.sensitive_body_keys],
+      max_body_size: [current_config.max_body_size, default_config.max_body_size],
+      debug_logging: [current_config.debug_logging, default_config.debug_logging],
+      logger: [current_config.logger, default_config.logger]
+    }
+
+    config_checks.each do |key, (current, default)|
+      unless current == default
+        changes << "  #{key}: #{current.inspect} (expected: #{default.inspect})"
+      end
+    end
+
+    return if changes.empty?
+
+    raise <<~ERROR
+      Test isolation failure: Global configuration was modified!
+
+      The following configuration values were changed from defaults:
+      #{changes.join("\n")}
+
+      This indicates that a test modified global configuration without proper cleanup.
+      Tests should either:
+      1. Use OutboundHttpLogger.with_configuration for temporary changes
+      2. Restore configuration in their teardown method
+      3. Use test helpers that automatically restore configuration
+
+      This check helps maintain test isolation and prevents configuration leakage.
+    ERROR
   end
 
   def with_logging_enabled
-    OutboundHttpLogger.enable!
+    OutboundHttpLogger.configure do |config|
+      config.enabled = true
+      # Set a test logger to avoid Rails.logger dependency
+      config.logger = Logger.new(StringIO.new) unless config.logger
+    end
     yield
   ensure
     OutboundHttpLogger.disable!

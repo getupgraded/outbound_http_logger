@@ -3,33 +3,57 @@
 module OutboundHttpLogger
   module Patches
     module FaradayPatch
+      @mutex = Mutex.new
+      @applied = false
+
       def self.apply!
-        return if @applied
-        return unless defined?(Faraday)
+        # Thread-safe patch application using mutex
+        @mutex.synchronize do
+          return if @applied
+          return unless defined?(Faraday)
 
-        # Patch Faraday::Connection
-        Faraday::Connection.prepend(ConnectionMethods)
-        @applied = true
+          # Patch Faraday::Connection
+          Faraday::Connection.prepend(ConnectionMethods)
+          @applied = true
 
-        OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: Faraday patch applied") if OutboundHttpLogger.configuration.debug_logging
+          OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: Faraday patch applied") if OutboundHttpLogger.configuration.debug_logging
+        end
+      end
+
+      def self.applied?
+        @mutex.synchronize { @applied }
+      end
+
+      def self.reset!
+        @mutex.synchronize { @applied = false }
       end
 
       module ConnectionMethods
         def run_request(method, url, body, headers, &block)
+          # Get configuration first to check if logging is enabled
+          config = OutboundHttpLogger.configuration
+
           # Early exit if logging is disabled
-          return super unless OutboundHttpLogger.enabled?
+          return super unless config.enabled?
 
-          # Prevent infinite recursion
-          return super if Thread.current[:outbound_http_logger_in_faraday]
+          library_name = 'faraday'
 
-          Thread.current[:outbound_http_logger_in_faraday] = true
+          # Check for recursion and prevent infinite loops
+          if config.in_recursion?(library_name)
+            config.check_recursion_depth!(library_name) if config.strict_recursion_detection
+            return super
+          end
+
+          # Build the full URL first (before setting recursion flag)
+          full_url = self.build_url(url)
+
+          # Early exit if URL should be excluded (before setting recursion flag)
+          return super unless config.should_log_url?(full_url.to_s)
+
+          # Increment recursion depth with guaranteed cleanup
+          config.increment_recursion_depth(library_name)
 
           begin
-            # Build the full URL
-            full_url = build_url(url)
-
-            # Early exit if URL should be excluded
-            return super unless OutboundHttpLogger.configuration.should_log_url?(full_url.to_s)
 
             # Capture request data
             request_data = {
@@ -51,19 +75,21 @@ module OutboundHttpLogger
               body: response.body
             }
 
-            # Early exit if content type should be excluded
+            # Check if content type should be excluded
             content_type = response_data[:headers]['content-type'] || response_data[:headers]['Content-Type']
-            return response unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+            should_log_content_type = OutboundHttpLogger.configuration.should_log_content_type?(content_type)
 
-            # Log the request
-            duration_seconds = end_time - start_time
-            OutboundHttpLogger.logger.log_completed_request(
-              method.to_s.upcase,
-              full_url.to_s,
-              request_data,
-              response_data,
-              duration_seconds
-            )
+            # Log the request only if content type is allowed
+            if should_log_content_type
+              duration_seconds = end_time - start_time
+              OutboundHttpLogger.logger.log_completed_request(
+                method.to_s.upcase,
+                full_url.to_s,
+                request_data,
+                response_data,
+                duration_seconds
+              )
+            end
 
             response
           rescue => e
@@ -95,7 +121,7 @@ module OutboundHttpLogger
 
             raise e
           ensure
-            Thread.current[:outbound_http_logger_in_faraday] = false
+            config.decrement_recursion_depth(library_name)
           end
         end
       end

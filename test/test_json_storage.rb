@@ -6,76 +6,137 @@ describe "JSON Storage Behavior" do
   let(:model) { OutboundHttpLogger::Models::OutboundRequestLog }
 
   before do
-    OutboundHttpLogger.enable!
+    # Reset database adapter cache
+    OutboundHttpLogger::Models::OutboundRequestLog.reset_adapter_cache!
+
+    # Reset global configuration to default state
+    config = OutboundHttpLogger.global_configuration
+    config.enabled                = false
+    config.excluded_urls          = [
+      %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
+      %r{/health},                               # Health check endpoints
+      %r{/ping}                                  # Ping endpoints
+    ]
+    config.excluded_content_types = [
+      'text/html',
+      'text/css',
+      'text/javascript',
+      'application/javascript',
+      'image/',
+      'video/',
+      'audio/',
+      'font/'
+    ]
+    config.sensitive_headers = [
+      'authorization',
+      'cookie',
+      'set-cookie',
+      'x-api-key',
+      'x-auth-token',
+      'x-access-token',
+      'bearer'
+    ]
+    config.sensitive_body_keys = [
+      'password',
+      'secret',
+      'token',
+      'key',
+      'auth',
+      'credential',
+      'private'
+    ]
+    config.max_body_size          = 10_000
+    config.debug_logging          = false
+    config.logger                 = nil
+
+    # Clear all logs
+    OutboundHttpLogger::Models::OutboundRequestLog.delete_all
+
+    # Clear thread-local data
+    OutboundHttpLogger.clear_thread_data
+  end
+
+  after do
+    # Disable logging
+    OutboundHttpLogger.disable!
+
+    # Clear thread-local data
+    OutboundHttpLogger.clear_thread_data
   end
 
   describe "SQLite adapter" do
     # Current test environment uses SQLite
 
     it "stores JSON fields as strings in SQLite" do
-      request_data = {
-        headers: { "Content-Type" => "application/json", "Authorization" => "Bearer token" },
-        body: '{"name": "John"}'
-      }
-      response_data = {
-        status_code: 200,
-        headers: { "Content-Type" => "application/json" },
-        body: '{"id": 1, "name": "John"}'
-      }
+      with_thread_safe_configuration(enabled: true) do
+        request_data = {
+          headers: { "Content-Type" => "application/json", "Authorization" => "Bearer token" },
+          body: '{"name": "John"}'
+        }
+        response_data = {
+          status_code: 200,
+          headers: { "Content-Type" => "application/json" },
+          body: '{"id": 1, "name": "John"}'
+        }
 
-      log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
+        log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
 
-      _(log).wont_be_nil
+        _(log).wont_be_nil
 
-      # In SQLite, JSON fields should be stored as strings
-      _(log.read_attribute(:request_headers)).must_be_kind_of String
-      _(log.read_attribute(:response_headers)).must_be_kind_of String
-      _(log.read_attribute(:request_body)).must_be_kind_of String
-      _(log.read_attribute(:response_body)).must_be_kind_of String
-      _(log.read_attribute(:metadata)).must_be_kind_of String
+        # In SQLite, JSON fields should be stored as strings
+        _(log.read_attribute(:request_headers)).must_be_kind_of String
+        _(log.read_attribute(:response_headers)).must_be_kind_of String
+        _(log.read_attribute(:request_body)).must_be_kind_of String
+        _(log.read_attribute(:response_body)).must_be_kind_of String
+        _(log.read_attribute(:metadata)).must_be_kind_of String
 
-      # But the accessor methods should return parsed objects
-      _(log.request_headers).must_be_kind_of Hash
-      _(log.response_headers).must_be_kind_of Hash
-      _(log.metadata).must_be_kind_of Hash
+        # But the accessor methods should return parsed objects
+        _(log.request_headers).must_be_kind_of Hash
+        _(log.response_headers).must_be_kind_of Hash
+        _(log.metadata).must_be_kind_of Hash
 
-      # Verify the content is correct
-      _(log.request_headers["Content-Type"]).must_equal "application/json"
-      _(log.request_headers["Authorization"]).must_equal "[FILTERED]"
-      _(log.response_headers["Content-Type"]).must_equal "application/json"
+        # Verify the content is correct
+        _(log.request_headers["Content-Type"]).must_equal "application/json"
+        _(log.request_headers["Authorization"]).must_equal "[FILTERED]"
+        _(log.response_headers["Content-Type"]).must_equal "application/json"
+      end
     end
 
     it "handles non-JSON string bodies correctly in SQLite" do
-      request_data = { body: "plain text body" }
-      response_data = { status_code: 200, body: "plain response" }
+      with_thread_safe_configuration(enabled: true) do
+        request_data = { body: "plain text body" }
+        response_data = { status_code: 200, body: "plain response" }
 
-      log = model.log_request("GET", "https://example.com", request_data, response_data, 0.1)
+        log = model.log_request("GET", "https://example.com", request_data, response_data, 0.1)
 
-      # Non-JSON strings should remain as strings
-      _(log.read_attribute(:request_body)).must_equal "plain text body"
-      _(log.read_attribute(:response_body)).must_equal "plain response"
-      _(log.request_body).must_equal "plain text body"
-      _(log.response_body).must_equal "plain response"
+        # Non-JSON strings should remain as strings
+        _(log.read_attribute(:request_body)).must_equal "plain text body"
+        _(log.read_attribute(:response_body)).must_equal "plain response"
+        _(log.request_body).must_equal "plain text body"
+        _(log.response_body).must_equal "plain response"
+      end
     end
 
     it "handles JSON object bodies correctly in SQLite" do
-      request_data = { body: { "name" => "John", "age" => 30 } }
-      response_data = { status_code: 200, body: { "id" => 1, "created" => true } }
+      with_thread_safe_configuration(enabled: true) do
+        request_data = { body: { "name" => "John", "age" => 30 } }
+        response_data = { status_code: 200, body: { "id" => 1, "created" => true } }
 
-      log = model.log_request("POST", "https://example.com", request_data, response_data, 0.1)
+        log = model.log_request("POST", "https://example.com", request_data, response_data, 0.1)
 
-      # Objects should be serialized to JSON strings in SQLite
-      _(log.read_attribute(:request_body)).must_be_kind_of String
-      _(log.read_attribute(:response_body)).must_be_kind_of String
+        # Objects should be serialized to JSON strings in SQLite
+        _(log.read_attribute(:request_body)).must_be_kind_of String
+        _(log.read_attribute(:response_body)).must_be_kind_of String
 
-      # Should be valid JSON
-      parsed_request = JSON.parse(log.read_attribute(:request_body))
-      _(parsed_request["name"]).must_equal "John"
-      _(parsed_request["age"]).must_equal 30
+        # Should be valid JSON
+        parsed_request = JSON.parse(log.read_attribute(:request_body))
+        _(parsed_request["name"]).must_equal "John"
+        _(parsed_request["age"]).must_equal 30
 
-      parsed_response = JSON.parse(log.read_attribute(:response_body))
-      _(parsed_response["id"]).must_equal 1
-      _(parsed_response["created"]).must_equal true
+        parsed_response = JSON.parse(log.read_attribute(:response_body))
+        _(parsed_response["id"]).must_equal 1
+        _(parsed_response["created"]).must_equal true
+      end
     end
   end
 
@@ -123,9 +184,6 @@ describe "JSON Storage Behavior" do
   end
 
   describe "PostgreSQL JSONB functionality" do
-    before do
-      OutboundHttpLogger.enable!
-    end
 
     it "detects JSONB usage correctly" do
       # This will depend on the database adapter being used in tests
@@ -203,28 +261,30 @@ describe "JSON Storage Behavior" do
 
   describe "consistent interface" do
     it "provides consistent hash interface regardless of storage format" do
-      request_data = {
-        headers: { "Content-Type" => "application/json", "Authorization" => "Bearer secret" },
-        metadata: { "user_id" => 123, "action" => "create" }
-      }
-      response_data = {
-        status_code: 201,
-        headers: { "Location" => "/users/123" }
-      }
+      with_thread_safe_configuration(enabled: true) do
+        request_data = {
+          headers: { "Content-Type" => "application/json", "Authorization" => "Bearer secret" },
+          metadata: { "user_id" => 123, "action" => "create" }
+        }
+        response_data = {
+          status_code: 201,
+          headers: { "Location" => "/users/123" }
+        }
 
-      log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
+        log = model.log_request("POST", "https://api.example.com/users", request_data, response_data, 0.1)
 
-      # Regardless of how data is stored, the interface should be consistent
-      _(log.request_headers).must_be_kind_of Hash
-      _(log.response_headers).must_be_kind_of Hash
-      _(log.metadata).must_be_kind_of Hash
+        # Regardless of how data is stored, the interface should be consistent
+        _(log.request_headers).must_be_kind_of Hash
+        _(log.response_headers).must_be_kind_of Hash
+        _(log.metadata).must_be_kind_of Hash
 
-      # Should be able to access nested data
-      _(log.request_headers["Content-Type"]).must_equal "application/json"
-      _(log.request_headers["Authorization"]).must_equal "[FILTERED]"
-      _(log.response_headers["Location"]).must_equal "/users/123"
-      _(log.metadata["user_id"]).must_equal 123
-      _(log.metadata["action"]).must_equal "create"
+        # Should be able to access nested data
+        _(log.request_headers["Content-Type"]).must_equal "application/json"
+        _(log.request_headers["Authorization"]).must_equal "[FILTERED]"
+        _(log.response_headers["Location"]).must_equal "/users/123"
+        _(log.metadata["user_id"]).must_equal 123
+        _(log.metadata["action"]).must_equal "create"
+      end
     end
   end
 end

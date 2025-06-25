@@ -42,22 +42,29 @@ module OutboundHttpLogger
       # Check if we're using JSONB (PostgreSQL) or regular JSON
       # Memoized for performance since this is called on every log entry
       def self.using_jsonb?
-        # Use a class variable for thread-safe memoization
-        @@using_jsonb ||= connection.adapter_name == 'PostgreSQL' &&
-                          columns_hash['response_body']&.sql_type == 'jsonb'
+        # Use instance variable for memoization that can be reset
+        @using_jsonb = connection.adapter_name == 'PostgreSQL' &&
+                       columns_hash['response_body']&.sql_type == 'jsonb' if @using_jsonb.nil?
+        @using_jsonb
+      end
+
+      # Reset memoized database adapter information (for testing)
+      def self.reset_adapter_cache!
+        @using_jsonb = nil
       end
 
       # Class methods for logging
       class << self
         # Log an outbound HTTP request with failsafe error handling
         def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
-          return nil unless OutboundHttpLogger.enabled?
-          return nil unless OutboundHttpLogger.configuration.should_log_url?(url)
+          config = OutboundHttpLogger.configuration
+          return nil unless config.enabled?
+          return nil unless config.should_log_url?(url)
 
           # Check content type filtering
           content_type = response_data[:headers]&.[]('content-type') ||
                          response_data[:headers]&.[]('Content-Type')
-          return nil unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+          return nil unless config.should_log_content_type?(content_type)
 
           duration_ms = (duration_seconds * 1000).round(2)
 
@@ -100,9 +107,6 @@ module OutboundHttpLogger
 
         # Search logs by various criteria
         def search(params = {})
-          # Ensure database adapter is included
-          ensure_database_adapter_included
-
           scope = all
 
           # General search
@@ -172,37 +176,41 @@ module OutboundHttpLogger
           count
         end
 
-        # Ensure the appropriate database adapter is included
-        def ensure_database_adapter_included
-          return if @adapter_included
 
-          adapter_name = connection.adapter_name.downcase
-          case adapter_name
-          when 'postgresql'
-            include OutboundHttpLogger::DatabaseAdapters::PostgresqlAdapter
-          when 'sqlite3', 'sqlite'
-            include OutboundHttpLogger::DatabaseAdapters::SqliteAdapter
-          end
-          @adapter_included = true
-        rescue ActiveRecord::ConnectionNotEstablished
-          # Connection not established yet, will be included later when needed
-        end
 
         # Database-specific text search
         def apply_text_search(scope, q, original_query)
-          # Default implementation for unsupported databases
+          adapter_name = connection.adapter_name.downcase
+          case adapter_name
+          when 'postgresql'
+            # Use PostgreSQL-specific text search with ILIKE for case-insensitive search
+            scope.where(
+              'LOWER(url) LIKE ? OR request_body ILIKE ? OR response_body ILIKE ?',
+              q, "%#{original_query}%", "%#{original_query}%"
+            )
+          else
+            # Default implementation for SQLite and other databases
+            scope.where(
+              'LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ?',
+              q, q, q
+            )
+          end
+        rescue ActiveRecord::ConnectionNotEstablished
+          # Fallback if connection is not established
           scope.where('LOWER(url) LIKE ?', q)
         end
 
         # JSON search methods
         def with_response_containing(key, value)
-          # Basic string search fallback
-          where('response_body LIKE ?', "%\"#{key}\":\"#{value}\"%")
+          # Basic string search fallback - handle JSON stored as strings
+          # Search for both key and value being present in the JSON
+          where('response_body LIKE ? AND response_body LIKE ?', "%#{key}%", "%#{value}%")
         end
 
         def with_request_containing(key, value)
-          # Basic string search fallback
-          where('request_body LIKE ?', "%\"#{key}\":\"#{value}\"%")
+          # Basic string search fallback - handle JSON stored as strings
+          # Search for both key and value being present in the JSON
+          where('request_body LIKE ? AND request_body LIKE ?', "%#{key}%", "%#{value}%")
         end
 
         def with_metadata_containing(key, value)

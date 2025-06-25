@@ -17,6 +17,9 @@ require_relative "outbound_http_logger/railtie" if defined?(Rails)
 
 module OutboundHttpLogger
   class Error < StandardError; end
+  class InfiniteRecursionError < Error; end
+
+  @config_mutex = Mutex.new
 
   class << self
     # Configuration instance (checks for thread-local override first)
@@ -24,9 +27,11 @@ module OutboundHttpLogger
       Thread.current[:outbound_http_logger_config_override] || global_configuration
     end
 
-    # Global configuration instance
+    # Global configuration instance (thread-safe)
     def global_configuration
-      @configuration ||= Configuration.new
+      @config_mutex.synchronize do
+        @configuration ||= Configuration.new
+      end
     end
 
     # Configure the gem with a block
@@ -51,6 +56,10 @@ module OutboundHttpLogger
       # Set thread-local override
       previous_override = Thread.current[:outbound_http_logger_config_override]
       Thread.current[:outbound_http_logger_config_override] = temp_config
+
+      # Apply patches if logging was enabled in the override
+      setup_patches if temp_config.enabled?
+
       yield
     ensure
       Thread.current[:outbound_http_logger_config_override] = previous_override
@@ -73,8 +82,9 @@ module OutboundHttpLogger
     end
 
     # Get the logger instance
+    # Don't cache the logger since configuration can change (especially in tests)
     def logger
-      @logger ||= Logger.new(configuration)
+      Logger.new(configuration)
     end
 
     # Set metadata for the current thread's outbound requests
@@ -88,10 +98,30 @@ module OutboundHttpLogger
     end
 
     # Clear thread-local data
+    # This method clears the core thread-local data used by OutboundHttpLogger
+    # For comprehensive cleanup (including internal state), use clear_all_thread_data
     def clear_thread_data
       Thread.current[:outbound_http_logger_metadata] = nil
       Thread.current[:outbound_http_logger_loggable] = nil
       Thread.current[:outbound_http_logger_config_override] = nil
+    end
+
+    # Clear ALL thread-local data including internal state variables
+    # Use this for comprehensive cleanup in test environments
+    def clear_all_thread_data
+      # Core user-facing data
+      Thread.current[:outbound_http_logger_metadata] = nil
+      Thread.current[:outbound_http_logger_loggable] = nil
+      Thread.current[:outbound_http_logger_config_override] = nil
+
+      # Internal state variables used by patches and recursion tracking
+      Thread.current[:outbound_http_logger_in_faraday] = nil
+      Thread.current[:outbound_http_logger_logging_error] = nil
+      Thread.current[:outbound_http_logger_depth_faraday] = nil
+      Thread.current[:outbound_http_logger_depth_net_http] = nil
+      Thread.current[:outbound_http_logger_depth_httparty] = nil
+      Thread.current[:outbound_http_logger_depth_test] = nil
+      Thread.current[:outbound_http_logger_in_request] = nil
     end
 
     # Secondary database logging methods
@@ -132,7 +162,10 @@ module OutboundHttpLogger
     # Reset configuration to defaults (useful for testing)
     # WARNING: This will lose all customizations from initializers
     def reset_configuration!
-      @configuration = nil
+      @config_mutex.synchronize do
+        @configuration = nil
+        @logger = nil
+      end
       # Also clear any thread-local overrides
       Thread.current[:outbound_http_logger_config_override] = nil
     end
@@ -145,6 +178,21 @@ module OutboundHttpLogger
     # Clear thread-local configuration override
     def clear_configuration_override
       Thread.current[:outbound_http_logger_config_override] = nil
+    end
+
+    # Reset patch application state (for testing)
+    def reset_patches!
+      Patches::NetHttpPatch.reset!
+      Patches::FaradayPatch.reset!
+      Patches::HttppartyPatch.reset!
+    end
+
+    # Complete reset for testing (patches, configuration, thread data)
+    def reset_for_testing!
+      reset_patches!
+      Models::OutboundRequestLog.reset_adapter_cache!
+      reset_configuration!
+      clear_thread_data
     end
 
     private

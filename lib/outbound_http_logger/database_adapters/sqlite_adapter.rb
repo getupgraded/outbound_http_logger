@@ -223,23 +223,23 @@ module OutboundHttpLogger
                 end
 
               def optimize_for_sqlite(log_data)
-                  # For SQLite, ensure JSON fields are properly serialized
-                  %i[request_headers request_body response_headers response_body metadata].each do |field|
-                    log_data[field] = serialize_json_field(log_data[field]) if log_data[field]
-                  end
-                  log_data
+                # For SQLite, ensure JSON fields are properly serialized
+                %i[request_headers request_body response_headers response_body metadata].each do |field|
+                  log_data[field] = serialize_json_field(log_data[field]) if log_data[field]
                 end
+                log_data
+              end
 
               def serialize_json_field(value)
-                  return nil if value.nil?
-                  return value if value.is_a?(String)
+                return nil if value.nil?
+                return value if value.is_a?(String)
 
-                  begin
-                    value.to_json
-                  rescue StandardError
-                    value.to_s
-                  end
+                begin
+                  value.to_json
+                rescue StandardError
+                  value.to_s
                 end
+              end
 
 
             end
