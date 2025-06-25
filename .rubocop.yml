@@ -18,6 +18,9 @@ AllCops:
   Exclude:
     - 'bin/**/*'
     - 'sig/**/*'
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+    - 'pkg/**/*'
     - 'lib/outbound_http_logger/generators/templates/**/*'
 
 # Gem-specific overrides
