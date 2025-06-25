@@ -131,6 +131,14 @@ module TestHelpers
 
     assert_equal 0, scope.count, "Expected no requests to be logged"
   end
+
+  # Thread-safe configuration override for simple attribute changes
+  # This is the recommended method for parallel testing
+  def with_thread_safe_configuration(**overrides)
+    OutboundHttpLogger.with_configuration(**overrides) do
+      yield
+    end
+  end
 end
 
 # Include test helpers in all test classes

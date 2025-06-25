@@ -289,11 +289,8 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
   end
 
   describe "loggable associations" do
-    before do
-      OutboundHttpLogger.enable!
-    end
-
     it "can associate logs with metadata" do
+      OutboundHttpLogger.enable!
       request_data = {
         headers: { "Content-Type" => "application/json" },
         body: '{"test": true}',
@@ -341,6 +338,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     end
 
     it "handles nil loggable gracefully" do
+      OutboundHttpLogger.enable!
       request_data = {
         headers: { "Content-Type" => "application/json" },
         body: '{"test": true}',

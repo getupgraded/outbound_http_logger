@@ -215,6 +215,14 @@ module OutboundHttpLogger
         assert_in_delta expected_rate, actual_rate, tolerance,
                         "Expected success rate of #{expected_rate}%, got #{actual_rate}%"
       end
+
+      # Thread-safe configuration override for simple attribute changes
+      # This is the recommended method for parallel testing
+      def with_thread_safe_configuration(**overrides)
+        OutboundHttpLogger.with_configuration(**overrides) do
+          yield
+        end
+      end
     end
   end
 end

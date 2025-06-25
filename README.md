@@ -401,6 +401,89 @@ RSpec.describe "Outbound API logging" do
 end
 ```
 
+### Parallel Testing Support
+
+The gem is fully thread-safe and supports parallel testing frameworks. It uses thread-local variables for request-specific metadata and loggable associations, ensuring that concurrent requests and tests don't interfere with each other.
+
+#### Thread-Safe Configuration
+
+For parallel testing frameworks, use the thread-safe configuration override:
+
+```ruby
+# Thread-safe configuration changes for testing
+OutboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+  # Configuration changes only affect current thread
+  # Other test threads are unaffected
+  # Automatically restored when block exits
+end
+```
+
+#### Configuration Backup and Restore
+
+For advanced test scenarios, you can manually backup and restore configuration:
+
+```ruby
+# Backup current configuration
+backup = OutboundHttpLogger::Test.backup_configuration
+
+# Make changes
+OutboundHttpLogger.configure do |config|
+  config.enabled = false
+  config.excluded_urls << 'https://skip-this.com'
+end
+
+# Restore original configuration
+OutboundHttpLogger::Test.restore_configuration(backup)
+
+# Or use the helper method for isolated configuration changes
+OutboundHttpLogger::Test.with_configuration(enabled: false) do
+  # Configuration changes are automatically restored after block
+  # This is the recommended approach for most test scenarios
+end
+```
+
+#### Test Helper Integration
+
+```ruby
+describe "My Feature" do
+  include OutboundHttpLogger::Test::Helpers
+
+  it "logs requests with thread-safe configuration" do
+    # Uses the simplified thread-safe configuration system
+    with_thread_safe_configuration(enabled: true, debug_logging: true) do
+      # Configuration changes only affect current thread
+      # Safe for parallel test execution
+      HTTParty.get('https://api.example.com/data')
+      assert_outbound_request_logged('GET', 'https://api.example.com/data')
+    end
+    # Configuration automatically restored after block
+  end
+end
+```
+
+#### Parallel Test Example
+
+```ruby
+# Multiple tests can run simultaneously without interference
+RSpec.describe "Parallel API tests", parallel: true do
+  it "test 1 with custom config" do
+    with_thread_safe_configuration(max_body_size: 5000, debug_logging: true) do
+      # This configuration only affects this test thread
+      HTTParty.post('https://api.example.com/large-data', body: large_payload)
+      expect(OutboundHttpLogger::Test.logs_count).to eq(1)
+    end
+  end
+
+  it "test 2 with different config" do
+    with_thread_safe_configuration(max_body_size: 1000, debug_logging: false) do
+      # This configuration is isolated from test 1
+      HTTParty.get('https://api.example.com/small-data')
+      expect(OutboundHttpLogger::Test.logs_count).to eq(1)
+    end
+  end
+end
+```
+
 ## Advanced Configuration
 
 ### Custom Exclusions

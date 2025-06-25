@@ -53,6 +53,7 @@ describe "Loggable Integration Tests" do
 
   describe "log_request with thread-local data" do
     it "includes thread-local metadata in logs" do
+      OutboundHttpLogger.enable!
       with_logging_enabled do
         # Set thread-local metadata (skip loggable for now due to ActiveRecord complexity)
         metadata = { action: "api_call", source: "test", user_id: 123 }

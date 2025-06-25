@@ -161,5 +161,37 @@ module OutboundHttpLogger
 
         filtered
       end
+
+    public
+
+    # Create a backup of the current configuration state
+    def backup
+      {
+        enabled: @enabled,
+        excluded_urls: @excluded_urls.dup,
+        excluded_content_types: @excluded_content_types.dup,
+        sensitive_headers: @sensitive_headers.dup,
+        sensitive_body_keys: @sensitive_body_keys.dup,
+        max_body_size: @max_body_size,
+        debug_logging: @debug_logging,
+        logger: @logger,
+        secondary_database_url: @secondary_database_url,
+        secondary_database_adapter: @secondary_database_adapter
+      }
+    end
+
+    # Restore configuration from a backup
+    def restore(backup)
+      @enabled = backup[:enabled]
+      @excluded_urls = backup[:excluded_urls]
+      @excluded_content_types = backup[:excluded_content_types]
+      @sensitive_headers = backup[:sensitive_headers]
+      @sensitive_body_keys = backup[:sensitive_body_keys]
+      @max_body_size = backup[:max_body_size]
+      @debug_logging = backup[:debug_logging]
+      @logger = backup[:logger]
+      @secondary_database_url = backup[:secondary_database_url]
+      @secondary_database_adapter = backup[:secondary_database_adapter]
+    end
   end
 end

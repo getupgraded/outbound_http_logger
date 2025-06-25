@@ -10,11 +10,8 @@ describe "Net::HTTP Patch" do
   end
 
   describe "when logging is enabled" do
-    before do
-      OutboundHttpLogger.enable!
-    end
-
     it "logs successful GET requests" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/users")
         .to_return(status: 200, body: '{"users": []}', headers: { 'Content-Type' => 'application/json' })
 
@@ -29,6 +26,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "logs POST requests with request body" do
+      OutboundHttpLogger.enable!
       stub_request(:post, "https://api.example.com/users")
         .with(body: '{"name": "John"}', headers: { 'Content-Type' => 'application/json' })
         .to_return(status: 201, body: '{"id": 1, "name": "John"}', headers: { 'Content-Type' => 'application/json' })
@@ -51,6 +49,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "logs requests with headers" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/protected")
         .with(headers: { 'Authorization' => 'Bearer token123' })
         .to_return(status: 200, body: '{"data": "secret"}', headers: { 'Content-Type' => 'application/json' })
@@ -71,6 +70,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "logs failed requests" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/notfound")
         .to_return(status: 404, body: '{"error": "Not found"}', headers: { 'Content-Type' => 'application/json' })
 
@@ -84,6 +84,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "skips excluded URLs" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/health")
         .to_return(status: 200, body: 'OK')
 
@@ -95,6 +96,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "skips excluded content types" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/page")
         .to_return(status: 200, body: '<html></html>', headers: { 'Content-Type' => 'text/html' })
 
@@ -106,6 +108,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "handles network errors gracefully" do
+      OutboundHttpLogger.enable!
       stub_request(:get, "https://api.example.com/error")
         .to_raise(SocketError.new("Connection failed"))
 
@@ -119,6 +122,7 @@ describe "Net::HTTP Patch" do
     end
 
     it "prevents infinite recursion" do
+      OutboundHttpLogger.enable!
       # This test ensures that our patch doesn't cause infinite loops
       stub_request(:get, "https://api.example.com/test")
         .to_return(status: 200, body: 'OK')
