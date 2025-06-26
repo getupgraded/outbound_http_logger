@@ -25,12 +25,9 @@ module OutboundHTTPLogger
       def count_logs
         return 0 unless enabled?
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("count logs in #{adapter_name}", default_return: 0) do
           ensure_connection_and_table
           model_class.count
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error counting logs in #{adapter_name}: #{e.class}: #{e.message}")
-          0
         end
       end
 
@@ -38,12 +35,9 @@ module OutboundHTTPLogger
       def count_logs_with_status(status)
         return 0 unless enabled?
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("count logs with status in #{adapter_name}", default_return: 0) do
           ensure_connection_and_table
           model_class.where(status_code: status).count
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error counting logs with status in #{adapter_name}: #{e.class}: #{e.message}")
-          0
         end
       end
 
@@ -51,12 +45,9 @@ module OutboundHTTPLogger
       def count_logs_for_url(url_pattern)
         return 0 unless enabled?
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("count logs for URL in #{adapter_name}", default_return: 0) do
           ensure_connection_and_table
           model_class.where('url LIKE ?', "%#{url_pattern}%").count
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error counting logs for URL in #{adapter_name}: #{e.class}: #{e.message}")
-          0
         end
       end
 
@@ -64,11 +55,9 @@ module OutboundHTTPLogger
       def clear_logs
         return unless enabled?
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("clear logs in #{adapter_name}") do
           ensure_connection_and_table
           model_class.delete_all
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error clearing logs in #{adapter_name}: #{e.class}: #{e.message}")
         end
       end
 
@@ -76,12 +65,9 @@ module OutboundHTTPLogger
       def all_logs
         return [] unless enabled?
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("fetch logs from #{adapter_name}", default_return: []) do
           ensure_connection_and_table
           model_class.order(created_at: :desc).limit(OutboundHTTPLogger::Configuration::DEFAULT_LOG_FETCH_LIMIT)
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error fetching logs from #{adapter_name}: #{e.class}: #{e.message}")
-          []
         end
       end
 
@@ -90,14 +76,11 @@ module OutboundHTTPLogger
         return nil unless enabled?
         return nil unless OutboundHTTPLogger.configuration.should_log_url?(url)
 
-        begin
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("log request in #{adapter_name}") do
           ensure_connection_and_table
 
           # Use the model class directly - it will use the correct connection
           model_class.log_request(method, url, request_data, response_data, duration_seconds, options)
-        rescue StandardError => e
-          OutboundHTTPLogger.configuration.get_logger&.error("Error logging request in #{adapter_name}: #{e.class}: #{e.message}")
-          nil
         end
       end
 

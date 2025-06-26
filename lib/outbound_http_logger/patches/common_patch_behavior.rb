@@ -107,40 +107,44 @@ module OutboundHTTPLogger
           )
         end
 
-        # Log successful HTTP request
+        # Log successful HTTP request with standardized error handling
         def log_successful_request(method, url, request_data, response_data, start_time, end_time)
-          # Check if content type should be excluded
-          content_type = extract_content_type(response_data[:headers])
-          return unless OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
+          OutboundHTTPLogger::ErrorHandling.handle_logging_error('log successful request') do
+            # Check if content type should be excluded
+            content_type = extract_content_type(response_data[:headers])
+            return unless OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
-          duration_seconds = end_time - start_time
-          OutboundHTTPLogger.logger.log_completed_request(
-            method,
-            url,
-            request_data,
-            response_data,
-            duration_seconds
-          )
+            duration_seconds = end_time - start_time
+            OutboundHTTPLogger.logger.log_completed_request(
+              method,
+              url,
+              request_data,
+              response_data,
+              duration_seconds
+            )
+          end
         end
 
-        # Log failed HTTP request
+        # Log failed HTTP request with standardized error handling
         def log_failed_request(method, url, library_specific_data, error, start_time, end_time)
-          duration_seconds = end_time - start_time
-          request_data = build_request_data(library_specific_data)
+          OutboundHTTPLogger::ErrorHandling.handle_logging_error('log failed request') do
+            duration_seconds = end_time - start_time
+            request_data = build_request_data(library_specific_data)
 
-          response_data = {
-            status_code: 0,
-            headers: {},
-            body: "Error: #{error.class}: #{error.message}"
-          }
+            response_data = {
+              status_code: 0,
+              headers: {},
+              body: "Error: #{error.class}: #{error.message}"
+            }
 
-          OutboundHTTPLogger.logger.log_completed_request(
-            method,
-            url,
-            request_data,
-            response_data,
-            duration_seconds
-          )
+            OutboundHTTPLogger.logger.log_completed_request(
+              method,
+              url,
+              request_data,
+              response_data,
+              duration_seconds
+            )
+          end
         end
 
         # Extract content type from response headers (handles case variations)

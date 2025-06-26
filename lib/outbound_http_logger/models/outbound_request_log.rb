@@ -94,17 +94,9 @@ module OutboundHTTPLogger
           # Apply database-specific optimizations
           log_data = optimize_for_database(log_data)
 
-          create!(log_data)
-        rescue StandardError => e
-          # Failsafe: Never let logging errors break the HTTP request
-          logger = OutboundHTTPLogger.configuration.get_logger
-          logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
-
-          # In test environments with strict error checking, re-raise the error
-          # This helps catch silent failures during testing
-          raise e if ENV['STRICT_ERROR_DETECTION'] == 'true'
-
-          nil
+          OutboundHTTPLogger::ErrorHandling.handle_database_error('create request log') do
+            create!(log_data)
+          end
         end
 
         # Search logs by various criteria
