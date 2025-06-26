@@ -26,23 +26,40 @@ module OutboundHTTPLogger
   @logger = nil
 
   class << self
-    # Configuration instance (checks for thread-local override first)
+    # Get the current configuration instance (checks for thread-local override first)
+    # @return [Configuration] The current configuration (thread-local override or global)
     def configuration
       Thread.current[:outbound_http_logger_config_override] || global_configuration
     end
 
-    # Global configuration instance (simple lazy initialization)
+    # Get the global configuration instance (simple lazy initialization)
+    # @return [Configuration] The global configuration object
     def global_configuration
       @global_configuration ||= Configuration.new
     end
 
     # Configure the gem with a block
+    # @yield [Configuration] Yields the current configuration for modification
+    # @return [void]
+    # @example
+    #   OutboundHTTPLogger.configure do |config|
+    #     config.enabled = true
+    #     config.excluded_urls << /private-api/
+    #   end
     def configure
       yield(configuration) if block_given?
       setup_patches if configuration.enabled?
     end
 
     # Thread-safe temporary configuration override for testing
+    # @param overrides [Hash] Configuration attributes to override
+    # @yield Block to execute with the temporary configuration
+    # @return [Object] The result of the yielded block
+    # @example
+    #   OutboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
+    #     # Code here runs with temporary configuration
+    #     HTTParty.get('https://api.example.com')
+    #   end
     def with_configuration(**overrides)
       return yield if overrides.empty?
 
@@ -67,32 +84,44 @@ module OutboundHTTPLogger
       Thread.current[:outbound_http_logger_config_override] = previous_override
     end
 
-    # Enable logging (can be called without a block)
+    # Enable logging and apply HTTP library patches
+    # @return [void]
     def enable!
       configuration.enabled = true
       apply_patches_if_needed
     end
 
     # Disable logging
+    # @return [void]
     def disable!
       configuration.enabled = false
     end
 
     # Check if logging is enabled
+    # @return [Boolean] true if logging is enabled
     delegate :enabled?, to: :configuration
 
     # Get the logger instance
     # Don't cache the logger since configuration can change (especially in tests)
+    # @return [Logger] The logger instance for recording HTTP requests
     def logger
       Logger.new(configuration)
     end
 
     # Set metadata for the current thread's outbound requests
+    # @param metadata [Hash] Metadata to associate with outbound requests
+    # @return [void]
+    # @example
+    #   OutboundHTTPLogger.set_metadata(user_id: 123, action: 'sync')
     def set_metadata(metadata)
       ThreadContext.metadata = metadata
     end
 
     # Set loggable for the current thread's outbound requests
+    # @param loggable [Object] ActiveRecord model or other object to associate with requests
+    # @return [void]
+    # @example
+    #   OutboundHTTPLogger.set_loggable(current_user)
     def set_loggable(loggable)
       ThreadContext.loggable = loggable
     end
@@ -100,12 +129,14 @@ module OutboundHTTPLogger
     # Clear thread-local data
     # This method clears the core thread-local data used by OutboundHTTPLogger
     # For comprehensive cleanup (including internal state), use clear_all_thread_data
+    # @return [void]
     def clear_thread_data
       ThreadContext.clear_user_data
     end
 
     # Clear ALL thread-local data including internal state variables
     # Use this for comprehensive cleanup in test environments
+    # @return [void]
     def clear_all_thread_data
       ThreadContext.clear_all
     end

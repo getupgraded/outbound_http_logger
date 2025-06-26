@@ -47,6 +47,14 @@ module OutboundHTTPLogger
       end
 
       # Execute block with specific loggable and metadata, ensuring restoration
+      # @param loggable [Object] Object to associate with outbound requests
+      # @param metadata [Hash] Metadata to associate with outbound requests
+      # @yield Block to execute with the specified context
+      # @return [Object] Result of the yielded block
+      # @example
+      #   ThreadContext.with_context(loggable: user, metadata: { action: 'sync' }) do
+      #     HTTParty.get('https://api.example.com')
+      #   end
       def with_context(loggable: nil, metadata: {})
         backup = backup_user_context
 
@@ -60,6 +68,7 @@ module OutboundHTTPLogger
       end
 
       # Backup current complete thread context
+      # @return [Hash] Hash containing all thread-local variables
       def backup_current
         THREAD_VARIABLES.each_with_object({}) do |var, backup|
           backup[var] = Thread.current[var]
@@ -67,6 +76,7 @@ module OutboundHTTPLogger
       end
 
       # Backup only user-facing context (metadata, loggable)
+      # @return [Hash] Hash containing user-facing thread-local variables
       def backup_user_context
         USER_VARIABLES.each_with_object({}) do |var, backup|
           backup[var] = Thread.current[var]
@@ -74,6 +84,8 @@ module OutboundHTTPLogger
       end
 
       # Restore complete thread context from backup
+      # @param backup [Hash] Hash containing thread-local variables to restore
+      # @return [void]
       def restore(backup)
         THREAD_VARIABLES.each do |var|
           Thread.current[var] = backup[var]
@@ -81,6 +93,8 @@ module OutboundHTTPLogger
       end
 
       # Restore user context from backup
+      # @param backup [Hash] Hash containing user-facing variables to restore
+      # @return [void]
       def restore_user_context(backup)
         USER_VARIABLES.each do |var|
           Thread.current[var] = backup[var]

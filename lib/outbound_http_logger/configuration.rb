@@ -74,10 +74,15 @@ module OutboundHTTPLogger
       @strict_recursion_detection = false # Whether to raise errors on recursion detection
     end
 
+    # Check if logging is enabled
+    # @return [Boolean] true if logging is enabled
     def enabled?
       @enabled == true
     end
 
+    # Determine if a URL should be logged based on configuration
+    # @param url [String] The URL to check
+    # @return [Boolean] true if the URL should be logged
     def should_log_url?(url)
       return false unless logging_enabled_for_url?
       return false unless valid_url?(url)
@@ -86,20 +91,28 @@ module OutboundHTTPLogger
     end
 
     # Check if logging is enabled for URL filtering
+    # @return [Boolean] true if logging is enabled
     def logging_enabled_for_url?
       enabled?
     end
 
     # Validate that URL is present and not blank
+    # @param url [String] The URL to validate
+    # @return [Boolean] true if URL is valid
     def valid_url?(url)
       url.present?
     end
 
     # Check if URL matches any exclusion patterns
+    # @param url [String] The URL to check against exclusion patterns
+    # @return [Boolean] true if URL should be excluded
     def url_excluded?(url)
       @excluded_urls.any? { |pattern| pattern.match?(url) }
     end
 
+    # Determine if a content type should be logged
+    # @param content_type [String] The content type to check
+    # @return [Boolean] true if the content type should be logged
     def should_log_content_type?(content_type)
       return true if content_type.blank?
 

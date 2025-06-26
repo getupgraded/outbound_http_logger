@@ -12,22 +12,26 @@ module OutboundHTTPLogger
       end
 
       # Enable test logging
+      # @return [void]
       def enable!
         configure unless @test_adapter
         @enabled = true
       end
 
       # Disable test logging
+      # @return [void]
       def disable!
         @enabled = false
       end
 
       # Check if test logging is enabled
+      # @return [Boolean] true if test logging is enabled
       def enabled?
         @enabled && @test_adapter&.enabled?
       end
 
-      # Reset test configuration
+      # Reset test configuration (disable, clear logs, reset adapter)
+      # @return [void]
       def reset!
         disable!
         clear_logs!
@@ -35,6 +39,7 @@ module OutboundHTTPLogger
       end
 
       # Clear all test logs
+      # @return [void]
       def clear_logs!
         return unless enabled?
 
@@ -43,7 +48,8 @@ module OutboundHTTPLogger
         OutboundHTTPLogger.configuration.get_logger&.debug("OutboundHTTPLogger::Test: Error clearing logs: #{e.message}")
       end
 
-      # Count total logs
+      # Count total logged requests
+      # @return [Integer] Number of logged requests
       def logs_count
         return 0 unless enabled?
 
