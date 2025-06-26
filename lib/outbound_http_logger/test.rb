@@ -118,7 +118,7 @@ module OutboundHTTPLogger
         { total: 0, successful: 0, failed: 0, success_rate: 0.0, average_duration: 0.0 }
       end
 
-      # Get all formatted calls (for compatibility with inbound_http_logger)
+      # Get all formatted calls
       def all_calls
         return [] unless enabled?
 

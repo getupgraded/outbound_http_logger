@@ -3,28 +3,24 @@
 module OutboundHTTPLogger
   module Patches
     module NetHTTPPatch
-      @mutex = Mutex.new
-      @applied = false
+      @@applied = false
 
       def self.apply!
-        # Thread-safe patch application using mutex
-        @mutex.synchronize do
-          return if @applied
-          return unless defined?(Net::HTTP)
+        # Simple one-time patch application (no mutex due to environment issues)
+        return if @@applied
+        return unless defined?(Net::HTTP)
 
-          Net::HTTP.prepend(InstanceMethods)
-          @applied = true
-
-          OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Net::HTTP patch applied') if OutboundHTTPLogger.configuration.debug_logging
-        end
+        Net::HTTP.prepend(InstanceMethods)
+        @@applied = true
+        OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Net::HTTP patch applied') if OutboundHTTPLogger.configuration.debug_logging
       end
 
       def self.applied?
-        @mutex.synchronize { @applied }
+        @@applied
       end
 
       def self.reset!
-        @mutex.synchronize { @applied = false }
+        @@applied = false
       end
 
       module InstanceMethods

@@ -3,7 +3,7 @@
 require 'test_helper'
 
 describe OutboundHTTPLogger::Models::OutboundRequestLog do
-  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
+  let(:log_model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   before do
     # Reset database adapter cache
@@ -58,7 +58,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
 
   after do
     # Disable logging
-    OutboundHTTPLogger.disable!
+    # OutboundHTTPLogger.disable!
 
     # Clear thread-local data
     OutboundHTTPLogger.clear_thread_data
@@ -66,28 +66,28 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
 
   describe 'validations' do
     it 'requires http_method' do
-      log = model.new(url: 'https://example.com', status_code: 200)
+      log = log_model.new(url: 'https://example.com', status_code: 200)
 
       _(log.valid?).must_equal false
       _(log.errors[:http_method]).must_include "can't be blank"
     end
 
     it 'requires url' do
-      log = model.new(http_method: 'GET', status_code: 200)
+      log = log_model.new(http_method: 'GET', status_code: 200)
 
       _(log.valid?).must_equal false
       _(log.errors[:url]).must_include "can't be blank"
     end
 
     it 'requires status_code' do
-      log = model.new(http_method: 'GET', url: 'https://example.com')
+      log = log_model.new(http_method: 'GET', url: 'https://example.com')
 
       _(log.valid?).must_equal false
       _(log.errors[:status_code]).must_include "can't be blank"
     end
 
     it 'requires status_code to be an integer' do
-      log = model.new(http_method: 'GET', url: 'https://example.com', status_code: 'not_a_number')
+      log = log_model.new(http_method: 'GET', url: 'https://example.com', status_code: 'not_a_number')
 
       _(log.valid?).must_equal false
       _(log.errors[:status_code]).must_include 'is not a number'
@@ -97,21 +97,21 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
   describe 'scopes' do
     before do
       # Create test data
-      @success_log = model.create!(
+      @success_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/users',
         status_code: 200,
         duration_ms: 150
       )
 
-      @error_log = model.create!(
+      @error_log = log_model.create!(
         http_method: 'POST',
         url: 'https://api.example.com/orders',
         status_code: 500,
         duration_ms: 2500
       )
 
-      @slow_log = model.create!(
+      @slow_log = log_model.create!(
         http_method: 'PUT',
         url: 'https://api.example.com/slow',
         status_code: 200,
@@ -120,7 +120,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'filters by status code' do
-      logs = model.with_status(200)
+      logs = log_model.with_status(200)
 
       _(logs.count).must_equal 2
       _(logs).must_include @success_log
@@ -128,14 +128,14 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'filters by HTTP method' do
-      logs = model.with_method('GET')
+      logs = log_model.with_method('GET')
 
       _(logs.count).must_equal 1
       _(logs.first).must_equal @success_log
     end
 
     it 'finds successful requests' do
-      logs = model.successful
+      logs = log_model.successful
 
       _(logs.count).must_equal 2
       _(logs).must_include @success_log
@@ -143,14 +143,14 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'finds failed requests' do
-      logs = model.failed
+      logs = log_model.failed
 
       _(logs.count).must_equal 1
       _(logs.first).must_equal @error_log
     end
 
     it 'finds slow requests' do
-      logs = model.slow(1000)
+      logs = log_model.slow(1000)
 
       _(logs.count).must_equal 2
       _(logs).must_include @error_log
@@ -173,7 +173,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
           body: '{"id": 1, "name": "test"}'
         }
 
-        log = model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.25)
+        log = log_model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.25)
 
         _(log).wont_be_nil
         _(log.http_method).must_equal 'POST'
@@ -190,14 +190,14 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     it 'returns nil when logging is disabled' do
       OutboundHTTPLogger.disable!
 
-      log = model.log_request('GET', 'https://api.example.com/users', {}, {}, 0.1)
+      log = log_model.log_request('GET', 'https://api.example.com/users', {}, {}, 0.1)
 
       _(log).must_be_nil
     end
 
     it 'returns nil for excluded URLs' do
       OutboundHTTPLogger.with_configuration(enabled: true) do
-        log = model.log_request('GET', 'https://api.example.com/health', {}, {}, 0.1)
+        log = log_model.log_request('GET', 'https://api.example.com/health', {}, {}, 0.1)
 
         _(log).must_be_nil
       end
@@ -211,7 +211,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
           body: '<html></html>'
         }
 
-        log = model.log_request('GET', 'https://api.example.com/page', {}, response_data, 0.1)
+        log = log_model.log_request('GET', 'https://api.example.com/page', {}, response_data, 0.1)
 
         _(log).must_be_nil
       end
@@ -219,10 +219,10 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
 
     it 'handles errors gracefully' do
       # Mock the create! method to raise an error
-      model.stubs(:create!).raises(StandardError, 'Database error')
+      log_model.stubs(:create!).raises(StandardError, 'Database error')
 
       # Should not raise an error, just return nil
-      log = model.log_request('GET', 'https://api.example.com/users', {}, {}, 0.1)
+      log = log_model.log_request('GET', 'https://api.example.com/users', {}, {}, 0.1)
 
       _(log).must_be_nil
     end
@@ -230,7 +230,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
 
   describe 'instance methods' do
     let(:log) do
-      model.create!(
+      log_model.create!(
         http_method: 'POST',
         url: 'https://api.example.com/users',
         status_code: 201,
@@ -246,7 +246,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     it 'formats duration correctly' do
       _(log.formatted_duration).must_equal '150.5ms'
 
-      slow_log = model.create!(
+      slow_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/slow',
         status_code: 200,
@@ -261,7 +261,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
       _(log.success?).must_equal true
       _(log.failure?).must_equal false
 
-      error_log = model.create!(
+      error_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/error',
         status_code: 500
@@ -279,7 +279,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     it 'provides status text' do
       _(log.status_text).must_equal 'Created'
 
-      not_found_log = model.create!(
+      not_found_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/notfound',
         status_code: 404
@@ -305,7 +305,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
 
   describe 'search functionality' do
     before do
-      @user_log = model.create!(
+      @user_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/users',
         status_code: 200,
@@ -313,7 +313,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         response_body: '{"users": [{"name": "John"}]}'
       )
 
-      @order_log = model.create!(
+      @order_log = log_model.create!(
         http_method: 'POST',
         url: 'https://api.example.com/orders',
         status_code: 201,
@@ -323,26 +323,26 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'searches by general query' do
-      results = model.search(q: 'users')
+      results = log_model.search(q: 'users')
 
       _(results.count).must_equal 1
       _(results.first).must_equal @user_log
 
-      results = model.search(q: 'widget')
+      results = log_model.search(q: 'widget')
 
       _(results.count).must_equal 1
       _(results.first).must_equal @order_log
     end
 
     it 'filters by status' do
-      results = model.search(status: 200)
+      results = log_model.search(status: 200)
 
       _(results.count).must_equal 1
       _(results.first).must_equal @user_log
     end
 
     it 'filters by method' do
-      results = model.search(method: 'POST')
+      results = log_model.search(method: 'POST')
 
       _(results.count).must_equal 1
       _(results.first).must_equal @order_log
@@ -364,7 +364,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
           body: '{"success": true}'
         }
 
-        log = model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
+        log = log_model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
 
         _(log).wont_be_nil
         _(log.metadata['action']).must_equal 'test_action'
@@ -373,7 +373,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'can create logs with loggable_type and loggable_id' do
-      log = model.create!(
+      log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/users1',
         status_code: 200,
@@ -386,7 +386,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'can search logs by loggable type and id' do
-      log = model.create!(
+      log = log_model.create!(
         http_method: 'POST',
         url: 'https://api.example.com/orders',
         status_code: 201,
@@ -394,7 +394,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         loggable_id: 456
       )
 
-      results = model.search(loggable_type: 'Order', loggable_id: 456)
+      results = log_model.search(loggable_type: 'Order', loggable_id: 456)
 
       _(results.count).must_equal 1
       _(results.first).must_equal log
@@ -415,7 +415,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
           body: '{"success": true}'
         }
 
-        log = model.log_request('GET', 'https://api.example.com/users', request_data, response_data, 0.1)
+        log = log_model.log_request('GET', 'https://api.example.com/users', request_data, response_data, 0.1)
 
         _(log).wont_be_nil
         _(log.loggable).must_be_nil
@@ -424,7 +424,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     end
 
     it 'can query logs by loggable_type' do
-      log1 = model.create!(
+      log1 = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/users',
         status_code: 200,
@@ -432,7 +432,7 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         loggable_id: 1
       )
 
-      log2 = model.create!(
+      log2 = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/orders',
         status_code: 200,
@@ -440,12 +440,12 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         loggable_id: 1
       )
 
-      user_logs = model.where(loggable_type: 'User')
+      user_logs = log_model.where(loggable_type: 'User')
 
       _(user_logs.count).must_equal 1
       _(user_logs.first).must_equal log1
 
-      order_logs = model.where(loggable_type: 'Order')
+      order_logs = log_model.where(loggable_type: 'Order')
 
       _(order_logs.count).must_equal 1
       _(order_logs.first).must_equal log2

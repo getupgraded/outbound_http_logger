@@ -99,6 +99,11 @@ module OutboundHTTPLogger
           # Failsafe: Never let logging errors break the HTTP request
           logger = OutboundHTTPLogger.configuration.get_logger
           logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
+
+          # In test environments with strict error checking, re-raise the error
+          # This helps catch silent failures during testing
+          raise e if ENV['STRICT_ERROR_DETECTION'] == 'true'
+
           nil
         end
 
@@ -185,8 +190,9 @@ module OutboundHTTPLogger
           case adapter_name
           when 'postgresql'
             # Use PostgreSQL-specific text search with ILIKE for case-insensitive search
+            # Cast JSON columns to text for proper ILIKE support
             scope.where(
-              'LOWER(url) LIKE ? OR request_body ILIKE ? OR response_body ILIKE ?',
+              'LOWER(url) LIKE ? OR request_body::text ILIKE ? OR response_body::text ILIKE ?',
               q, "%#{original_query}%", "%#{original_query}%"
             )
           else

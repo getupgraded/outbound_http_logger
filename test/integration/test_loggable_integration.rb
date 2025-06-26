@@ -5,11 +5,11 @@ require 'test_helper'
 describe 'Loggable Integration Tests' do
   include TestHelpers
 
-  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
+  let(:log_model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   describe 'thread-local data integration' do
     it 'stores and retrieves loggable and metadata' do
-      with_logging_enabled do
+      with_outbound_http_logging_enabled do
         # Test setting loggable
         mock_user = Object.new
         OutboundHTTPLogger.set_loggable(mock_user)
@@ -31,7 +31,7 @@ describe 'Loggable Integration Tests' do
     end
 
     it 'with_logging method works correctly' do
-      with_logging_enabled do
+      with_outbound_http_logging_enabled do
         # Set initial values
         initial_user     = Object.new
         initial_metadata = { initial: true }
@@ -50,6 +50,9 @@ describe 'Loggable Integration Tests' do
         # Values should be restored
         _(Thread.current[:outbound_http_logger_loggable]).must_equal initial_user
         _(Thread.current[:outbound_http_logger_metadata]).must_equal initial_metadata
+
+        # Clean up the initial values we set
+        OutboundHTTPLogger.clear_thread_data
       end
     end
   end
@@ -75,20 +78,23 @@ describe 'Loggable Integration Tests' do
           body: '{"success": true}'
         }
 
-        log = model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
+        log = log_model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
 
         _(log).wont_be_nil
         _(log.loggable).must_be_nil
         _(log.metadata['action']).must_equal 'api_call'
         _(log.metadata['source']).must_equal 'test'
         _(log.metadata['user_id']).must_equal 123
+
+        # Clean up thread-local data
+        OutboundHTTPLogger.clear_thread_data
       end
     end
 
     it 'can create logs with loggable_type and loggable_id directly' do
-      with_logging_enabled do
+      with_outbound_http_logging_enabled do
         # Test creating a log with loggable_type and loggable_id instead of a real object
-        log = model.create!(
+        log = log_model.create!(
           http_method: 'GET',
           url: 'https://api.example.com/users',
           status_code: 200,

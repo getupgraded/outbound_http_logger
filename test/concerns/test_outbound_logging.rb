@@ -9,6 +9,11 @@ describe OutboundHTTPLogger::Concerns::OutboundLogging do
     Thread.current[:outbound_http_logger_metadata] = nil
   end
 
+  after do
+    # Clean up thread-local data after each test
+    OutboundHTTPLogger.clear_thread_data
+  end
+
   # Create a class that includes the concern
   let(:controller_class) do
     Class.new do

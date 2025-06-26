@@ -3,7 +3,7 @@
 require 'test_helper'
 
 describe 'JSON Storage Behavior' do
-  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
+  let(:log_model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   before do
     # Reset database adapter cache
@@ -79,7 +79,7 @@ describe 'JSON Storage Behavior' do
           body: '{"id": 1, "name": "John"}'
         }
 
-        log = model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
+        log = log_model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
 
         _(log).wont_be_nil
 
@@ -107,7 +107,7 @@ describe 'JSON Storage Behavior' do
         request_data = { body: 'plain text body' }
         response_data = { status_code: 200, body: 'plain response' }
 
-        log = model.log_request('GET', 'https://example.com', request_data, response_data, 0.1)
+        log = log_model.log_request('GET', 'https://example.com', request_data, response_data, 0.1)
 
         # Non-JSON strings should remain as strings
         _(log.read_attribute(:request_body)).must_equal 'plain text body'
@@ -122,7 +122,7 @@ describe 'JSON Storage Behavior' do
         request_data = { body: { 'name' => 'John', 'age' => 30 } }
         response_data = { status_code: 200, body: { 'id' => 1, 'created' => true } }
 
-        log = model.log_request('POST', 'https://example.com', request_data, response_data, 0.1)
+        log = log_model.log_request('POST', 'https://example.com', request_data, response_data, 0.1)
 
         # Objects should be serialized to JSON strings in SQLite
         _(log.read_attribute(:request_body)).must_be_kind_of String
@@ -155,7 +155,7 @@ describe 'JSON Storage Behavior' do
         metadata: { 'action' => 'test' }
       }
 
-      optimized_data = model.send(:optimize_for_jsonb, test_data)
+      optimized_data = log_model.send(:optimize_for_jsonb, test_data)
 
       # Headers and metadata should remain as objects
       _(optimized_data[:request_headers]).must_be_kind_of Hash
@@ -176,7 +176,7 @@ describe 'JSON Storage Behavior' do
         request_headers: { 'Content-Type' => 'text/plain' }
       }
 
-      optimized_data = model.send(:optimize_for_jsonb, test_data)
+      optimized_data = log_model.send(:optimize_for_jsonb, test_data)
 
       # Non-JSON strings should remain as strings
       _(optimized_data[:request_body]).must_equal 'plain text'
@@ -190,14 +190,14 @@ describe 'JSON Storage Behavior' do
       # This will depend on the database adapter being used in tests
       if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL'
         # Skip if we don't have the actual table yet (migration not run)
-        skip 'JSONB test requires PostgreSQL with migrated table' unless model.table_exists?
+        skip 'JSONB test requires PostgreSQL with migrated table' unless log_model.table_exists?
       else
-        _(model.using_jsonb?).must_equal false
+        _(log_model.using_jsonb?).must_equal false
       end
     end
 
     it 'stores JSON response as parsed object for JSONB' do
-      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+      skip 'JSONB test requires PostgreSQL' unless log_model.using_jsonb?
 
       request_data = {
         headers: { 'Content-Type' => 'application/json' },
@@ -208,7 +208,7 @@ describe 'JSON Storage Behavior' do
         body: { 'status' => 'success', 'data' => { 'id' => 123, 'name' => 'test' } }
       }
 
-      log = model.log_request('POST', 'https://api.example.com/test', request_data, response_data, 0.1)
+      log = log_model.log_request('POST', 'https://api.example.com/test', request_data, response_data, 0.1)
 
       _(log).wont_be_nil
       # For JSONB, response_body should be stored as a parsed hash, not a string
@@ -220,12 +220,12 @@ describe 'JSON Storage Behavior' do
     end
 
     it 'stores non-JSON response as string for JSONB' do
-      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+      skip 'JSONB test requires PostgreSQL' unless log_model.using_jsonb?
 
       request_data = { body: 'plain text request' }
       response_data = { status_code: 200, body: 'plain text response' }
 
-      log = model.log_request('GET', 'https://api.example.com/test', request_data, response_data, 0.1)
+      log = log_model.log_request('GET', 'https://api.example.com/test', request_data, response_data, 0.1)
 
       _(log).wont_be_nil
       # For non-JSON content, should remain as string
@@ -236,17 +236,17 @@ describe 'JSON Storage Behavior' do
     end
 
     it 'uses JSONB operators for search when available' do
-      skip 'JSONB test requires PostgreSQL' unless model.using_jsonb?
+      skip 'JSONB test requires PostgreSQL' unless log_model.using_jsonb?
 
       # Create test logs with JSON data
-      json_log = model.create!(
+      json_log = log_model.create!(
         http_method: 'POST',
         url: 'https://api.example.com/users',
         status_code: 200,
         response_body: { 'users' => [{ 'name' => 'John', 'role' => 'admin' }] }
       )
 
-      text_log = model.create!(
+      text_log = log_model.create!(
         http_method: 'GET',
         url: 'https://api.example.com/status',
         status_code: 200,
@@ -254,7 +254,7 @@ describe 'JSON Storage Behavior' do
       )
 
       # Search should find the JSON log
-      results = model.search(q: 'John')
+      results = log_model.search(q: 'John')
 
       _(results).must_include json_log
       _(results).wont_include text_log
@@ -273,7 +273,7 @@ describe 'JSON Storage Behavior' do
           headers: { 'Location' => '/users/123' }
         }
 
-        log = model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
+        log = log_model.log_request('POST', 'https://api.example.com/users', request_data, response_data, 0.1)
 
         # Regardless of how data is stored, the interface should be consistent
         _(log.request_headers).must_be_kind_of Hash

@@ -12,6 +12,7 @@ group :development, :test do
   gem 'irb'
   gem 'httparty', '~> 0.20'
   gem 'minitest', '~> 5.0'
+  gem 'minitest-parallel-db', '~> 0.0.4'
   gem 'mocha', '~> 2.0'
   gem 'pg', '~> 1.5'
   gem 'rake', '~> 13.0'

@@ -23,13 +23,11 @@ describe OutboundHTTPLogger do
     end
 
     it 'can be configured with a block' do
-      OutboundHTTPLogger.configure do |config|
-        config.enabled       = true
-        config.debug_logging = true
+      # Use thread-safe configuration to avoid modifying global config
+      OutboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
+        _(OutboundHTTPLogger.enabled?).must_equal true
+        _(OutboundHTTPLogger.configuration.debug_logging).must_equal true
       end
-
-      _(OutboundHTTPLogger.enabled?).must_equal true
-      _(OutboundHTTPLogger.configuration.debug_logging).must_equal true
     end
   end
 
@@ -165,6 +163,9 @@ describe OutboundHTTPLogger do
       # Values should be restored
       _(Thread.current[:outbound_http_logger_loggable]).must_equal initial_loggable
       _(Thread.current[:outbound_http_logger_metadata]).must_equal initial_metadata
+
+      # Clean up the initial values we set
+      OutboundHTTPLogger.clear_thread_data
     end
 
     it 'with_logging method works with nil initial values' do

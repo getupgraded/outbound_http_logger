@@ -160,33 +160,46 @@ module OutboundHTTPLogger
               end
 
               # SQLite-specific JSON scopes
-              # Note: For SQLite, JSON is stored as text, so we use JSON_EXTRACT to query it
+              # Note: For SQLite, JSON is stored as text. Due to issues with JSON_EXTRACT
+              # and ActiveRecord parameter binding, we use LIKE queries for better compatibility
               def with_response_containing(key, value)
-                where('JSON_EXTRACT(response_body, ?) = ?', "$.#{key}", value.to_s)
+                # Use LIKE query to search for the key-value pair in JSON text
+                # Handle both escaped and unescaped JSON formats
+                where('response_body LIKE ? OR response_body LIKE ?',
+                      "%\"#{key}\":\"#{value}\"%",
+                      "%\\\"#{key}\\\":\\\"#{value}\\\"%")
               end
 
               def with_request_containing(key, value)
-                where('JSON_EXTRACT(request_body, ?) = ?', "$.#{key}", value.to_s)
+                # Use LIKE query to search for the key-value pair in JSON text
+                # Handle both escaped and unescaped JSON formats
+                where('request_body LIKE ? OR request_body LIKE ?',
+                      "%\"#{key}\":\"#{value}\"%",
+                      "%\\\"#{key}\\\":\\\"#{value}\\\"%")
               end
 
               def with_metadata_containing(key, value)
-                where('JSON_EXTRACT(metadata, ?) = ?', "$.#{key}", value.to_s)
+                # Use LIKE query to search for the key-value pair in JSON text
+                # Handle both escaped and unescaped JSON formats
+                where('metadata LIKE ? OR metadata LIKE ?',
+                      "%\"#{key}\":\"#{value}\"%",
+                      "%\\\"#{key}\\\":\\\"#{value}\\\"%")
               end
 
               # SQLite-specific header queries
               def with_response_header(header_name, header_value = nil)
                 if header_value
-                  where('JSON_EXTRACT(response_headers, ?) = ?', "$.#{header_name}", header_value.to_s)
+                  where('response_headers LIKE ?', "%\"#{header_name}\":\"#{header_value}\"%")
                 else
-                  where('JSON_EXTRACT(response_headers, ?) IS NOT NULL', "$.#{header_name}")
+                  where('response_headers LIKE ?', "%\"#{header_name}\":%")
                 end
               end
 
               def with_request_header(header_name, header_value = nil)
                 if header_value
-                  where('JSON_EXTRACT(request_headers, ?) = ?', "$.#{header_name}", header_value.to_s)
+                  where('request_headers LIKE ?', "%\"#{header_name}\":\"#{header_value}\"%")
                 else
-                  where('JSON_EXTRACT(request_headers, ?) IS NOT NULL', "$.#{header_name}")
+                  where('request_headers LIKE ?', "%\"#{header_name}\":%")
                 end
               end
 

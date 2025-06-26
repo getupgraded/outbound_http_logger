@@ -3,29 +3,25 @@
 module OutboundHTTPLogger
   module Patches
     module HTTPartyPatch
-      @mutex = Mutex.new
-      @applied = false
+      @@applied = false
 
       def self.apply!
-        # Thread-safe patch application using mutex
-        @mutex.synchronize do
-          return if @applied
-          return unless defined?(HTTParty)
+        # Simple one-time patch application (no mutex due to environment issues)
+        return if @@applied
+        return unless defined?(HTTParty)
 
-          # Patch HTTParty::Request
-          HTTParty::Request.prepend(RequestMethods)
-          @applied = true
-
-          OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: HTTParty patch applied') if OutboundHTTPLogger.configuration.debug_logging
-        end
+        # Patch HTTParty::Request
+        HTTParty::Request.prepend(RequestMethods)
+        @@applied = true
+        OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: HTTParty patch applied') if OutboundHTTPLogger.configuration.debug_logging
       end
 
       def self.applied?
-        @mutex.synchronize { @applied }
+        @@applied
       end
 
       def self.reset!
-        @mutex.synchronize { @applied = false }
+        @@applied = false
       end
 
       module RequestMethods

@@ -12,7 +12,7 @@ module OutboundHTTPLogger
 
       # Add custom metadata to outbound requests in the current thread
       def add_outbound_log_metadata(metadata)
-        current_metadata = Thread.current[:outbound_http_logger_metadata] || {}
+        current_metadata = OutboundHTTPLogger::ThreadContext.metadata || {}
         OutboundHTTPLogger.set_metadata(current_metadata.merge(metadata))
       end
 
@@ -22,20 +22,8 @@ module OutboundHTTPLogger
       end
 
       # Execute a block with specific loggable and metadata for outbound requests
-      def with_outbound_logging(loggable: nil, metadata: {})
-        # Store current values
-        original_loggable = Thread.current[:outbound_http_logger_loggable]
-        original_metadata = Thread.current[:outbound_http_logger_metadata]
-
-        # Set new values
-        OutboundHTTPLogger.set_loggable(loggable) if loggable
-        OutboundHTTPLogger.set_metadata(metadata) if metadata.any?
-
-        yield
-      ensure
-        # Restore original values
-        Thread.current[:outbound_http_logger_loggable] = original_loggable
-        Thread.current[:outbound_http_logger_metadata] = original_metadata
+      def with_outbound_logging(loggable: nil, metadata: {}, &)
+        OutboundHTTPLogger::ThreadContext.with_context(loggable: loggable, metadata: metadata, &)
       end
     end
   end

@@ -2,9 +2,9 @@
 
 require 'active_record'
 require 'active_support'
-
 require_relative 'outbound_http_logger/version'
 require_relative 'outbound_http_logger/configuration'
+require_relative 'outbound_http_logger/thread_context'
 require_relative 'outbound_http_logger/database_adapters/postgresql_adapter'
 require_relative 'outbound_http_logger/database_adapters/sqlite_adapter'
 require_relative 'outbound_http_logger/models/outbound_request_log'
@@ -19,7 +19,9 @@ module OutboundHTTPLogger
   class Error < StandardError; end
   class InfiniteRecursionError < Error; end
 
-  @config_mutex = Mutex.new
+  # Simple global configuration (not frequently changed, no atomic operations needed)
+  @global_configuration = nil
+  @logger = nil
 
   class << self
     # Configuration instance (checks for thread-local override first)
@@ -27,11 +29,9 @@ module OutboundHTTPLogger
       Thread.current[:outbound_http_logger_config_override] || global_configuration
     end
 
-    # Global configuration instance (thread-safe)
+    # Global configuration instance (simple lazy initialization)
     def global_configuration
-      @config_mutex.synchronize do
-        @global_configuration ||= Configuration.new
-      end
+      @global_configuration ||= Configuration.new
     end
 
     # Configure the gem with a block
@@ -87,39 +87,25 @@ module OutboundHTTPLogger
 
     # Set metadata for the current thread's outbound requests
     def set_metadata(metadata)
-      Thread.current[:outbound_http_logger_metadata] = metadata
+      ThreadContext.metadata = metadata
     end
 
     # Set loggable for the current thread's outbound requests
     def set_loggable(loggable)
-      Thread.current[:outbound_http_logger_loggable] = loggable
+      ThreadContext.loggable = loggable
     end
 
     # Clear thread-local data
     # This method clears the core thread-local data used by OutboundHTTPLogger
     # For comprehensive cleanup (including internal state), use clear_all_thread_data
     def clear_thread_data
-      Thread.current[:outbound_http_logger_metadata] = nil
-      Thread.current[:outbound_http_logger_loggable] = nil
-      Thread.current[:outbound_http_logger_config_override] = nil
+      ThreadContext.clear_user_data
     end
 
     # Clear ALL thread-local data including internal state variables
     # Use this for comprehensive cleanup in test environments
     def clear_all_thread_data
-      # Core user-facing data
-      Thread.current[:outbound_http_logger_metadata] = nil
-      Thread.current[:outbound_http_logger_loggable] = nil
-      Thread.current[:outbound_http_logger_config_override] = nil
-
-      # Internal state variables used by patches and recursion tracking
-      Thread.current[:outbound_http_logger_in_faraday] = nil
-      Thread.current[:outbound_http_logger_logging_error] = nil
-      Thread.current[:outbound_http_logger_depth_faraday] = nil
-      Thread.current[:outbound_http_logger_depth_net_http] = nil
-      Thread.current[:outbound_http_logger_depth_httparty] = nil
-      Thread.current[:outbound_http_logger_depth_test] = nil
-      Thread.current[:outbound_http_logger_in_request] = nil
+      ThreadContext.clear_all
     end
 
     # Secondary database logging methods
@@ -141,29 +127,61 @@ module OutboundHTTPLogger
     end
 
     # Execute a block with specific loggable and metadata for outbound requests
-    def with_logging(loggable: nil, metadata: {})
-      # Store current values
-      original_loggable = Thread.current[:outbound_http_logger_loggable]
-      original_metadata = Thread.current[:outbound_http_logger_metadata]
+    def with_logging(loggable: nil, metadata: {}, &)
+      ThreadContext.with_context(loggable: loggable, metadata: metadata, &)
+    end
 
-      # Set new values
-      set_loggable(loggable) if loggable
-      set_metadata(metadata) if metadata.any?
+    # Execute a block with complete thread isolation (configuration + data)
+    # This is the recommended method for testing and ensures no leakage
+    def with_isolated_context(loggable: nil, metadata: {}, **config_overrides)
+      # Backup complete thread context
+      context_backup = ThreadContext.backup_current
 
-      yield
-    ensure
-      # Restore original values
-      Thread.current[:outbound_http_logger_loggable] = original_loggable
-      Thread.current[:outbound_http_logger_metadata] = original_metadata
+      begin
+        # Apply configuration overrides if provided
+        if config_overrides.any?
+          current_config = configuration
+          backup = current_config.backup
+          temp_config = Configuration.new
+          temp_config.restore(backup)
+
+          # Apply overrides
+          config_overrides.each { |key, value| temp_config.public_send("#{key}=", value) }
+
+          # Set thread-local configuration override
+          previous_override = Thread.current[:outbound_http_logger_config_override]
+          Thread.current[:outbound_http_logger_config_override] = temp_config
+
+          begin
+            # Apply patches if logging was enabled in the override
+            setup_patches if temp_config.enabled?
+
+            # Set thread-local data if provided
+            ThreadContext.loggable = loggable if loggable
+            ThreadContext.metadata = metadata if metadata.any?
+
+            yield
+          ensure
+            Thread.current[:outbound_http_logger_config_override] = previous_override
+          end
+        else
+          # No config overrides, just set thread-local data
+          ThreadContext.loggable = loggable if loggable
+          ThreadContext.metadata = metadata if metadata.any?
+          yield
+        end
+      ensure
+        # Restore complete thread context
+        ThreadContext.restore(context_backup)
+      end
     end
 
     # Reset configuration to defaults (useful for testing)
     # WARNING: This will lose all customizations from initializers
     def reset_configuration!
-      @config_mutex.synchronize do
-        @global_configuration = nil
-        @logger = nil
-      end
+      # Simple reset of configuration and logger
+      @global_configuration = nil
+      @logger = nil
       # Also clear any thread-local overrides
       Thread.current[:outbound_http_logger_config_override] = nil
     end
