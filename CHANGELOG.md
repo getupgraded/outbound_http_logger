@@ -25,6 +25,9 @@
 - ✅ Remove unused development dependencies (rubocop-md) and relax ActiveRecord/ActiveSupport constraints to >= 7.0.0
 - ✅ Add graceful handling for optional HTTP libraries with improved error handling and logging
 
+### Documentation
+- ✅ Document thread-based logic for parallel testing with comprehensive THREAD_SAFETY.md and updated AGENTS.md
+
 ### Architecture Enhancements
 - Standardize database adapter interface and error handling
 - Add structured logging, metrics collection, and debugging tools
