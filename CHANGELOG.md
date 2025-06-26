@@ -3,7 +3,7 @@
 ## 0.0.2 (Unreleased)
 
 ### Code Quality Improvements
-- Extract common patch behavior into shared module to eliminate duplication
+- ✅ Extract common patch behavior into shared module to eliminate duplication across Net::HTTP, Faraday, and HTTParty patches
 - Replace magic numbers with named constants for better maintainability
 - Refactor URL filtering logic into focused, separate methods
 - Standardize error handling patterns across the codebase
