@@ -1,38 +1,57 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Patches
-    module NetHttpPatch
+    module NetHTTPPatch
+      @@applied = false
+
       def self.apply!
-        return if @applied
+        # Simple one-time patch application (no mutex due to environment issues)
+        return if @@applied
         return unless defined?(Net::HTTP)
 
         Net::HTTP.prepend(InstanceMethods)
-        @applied = true
+        @@applied = true
+        OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Net::HTTP patch applied') if OutboundHTTPLogger.configuration.debug_logging
+      end
 
-        OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: Net::HTTP patch applied") if OutboundHttpLogger.configuration.debug_logging
+      def self.applied?
+        @@applied
+      end
+
+      def self.reset!
+        @@applied = false
       end
 
       module InstanceMethods
-        def request(req, body = nil, &block)
+        def request(req, body = nil, &)
+          # Get configuration first to check if logging is enabled
+          config = OutboundHTTPLogger.configuration
+
           # Early exit if logging is disabled
-          return super unless OutboundHttpLogger.enabled?
+          return super unless config.enabled?
 
-          # Prevent infinite recursion
-          return super if Thread.current[:outbound_http_logger_in_request]
+          library_name = 'net_http'
 
-          Thread.current[:outbound_http_logger_in_request] = true
+          # Check for recursion and prevent infinite loops
+          if config.in_recursion?(library_name)
+            config.check_recursion_depth!(library_name) if config.strict_recursion_detection
+            return super
+          end
+
+          # Build the full URL (omit default ports)
+          scheme       = use_ssl? ? 'https' : 'http'
+          default_port = use_ssl? ? 443 : 80
+          port_part    = port == default_port ? '' : ":#{port}"
+          url          = "#{scheme}://#{address}#{port_part}#{req.path}"
+
+          # Early exit if URL should be excluded (before setting recursion flag)
+          return super unless config.should_log_url?(url)
+
+          # Increment recursion depth with guaranteed cleanup
+          config.increment_recursion_depth(library_name)
 
           begin
-            # Build the full URL (omit default ports)
-            scheme       = use_ssl? ? 'https' : 'http'
-            default_port = use_ssl? ? 443 : 80
-            port_part    = (port == default_port) ? '' : ":#{port}"
-            url          = "#{scheme}://#{address}#{port_part}#{req.path}"
-
-            # Early exit if URL should be excluded
-            return super unless OutboundHttpLogger.configuration.should_log_url?(url)
-
             # Capture request data
             request_data = {
               headers: extract_request_headers(req),
@@ -53,22 +72,24 @@ module OutboundHttpLogger
               body: response.body
             }
 
-            # Early exit if content type should be excluded
+            # Check if content type should be excluded
             content_type = response_data[:headers]['content-type'] || response_data[:headers]['Content-Type']
-            return response unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+            should_log_content_type = OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
-            # Log the request
-            duration_seconds = end_time - start_time
-            OutboundHttpLogger.logger.log_completed_request(
-              req.method,
-              url,
-              request_data,
-              response_data,
-              duration_seconds
-            )
+            # Log the request only if content type is allowed
+            if should_log_content_type
+              duration_seconds = end_time - start_time
+              OutboundHTTPLogger.logger.log_completed_request(
+                req.method,
+                url,
+                request_data,
+                response_data,
+                duration_seconds
+              )
+            end
 
             response
-          rescue => e
+          rescue StandardError => e
             # Log failed requests too
             end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             duration_seconds = end_time - start_time
@@ -87,7 +108,7 @@ module OutboundHttpLogger
               body: "Error: #{e.class}: #{e.message}"
             }
 
-            OutboundHttpLogger.logger.log_completed_request(
+            OutboundHTTPLogger.logger.log_completed_request(
               req.method,
               url,
               request_data,
@@ -97,7 +118,7 @@ module OutboundHttpLogger
 
             raise e
           ensure
-            Thread.current[:outbound_http_logger_in_request] = false
+            config.decrement_recursion_depth(library_name)
           end
         end
 

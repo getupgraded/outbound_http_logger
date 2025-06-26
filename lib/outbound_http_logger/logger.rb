@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   class Logger
     attr_reader :configuration
 
@@ -9,7 +9,7 @@ module OutboundHttpLogger
     end
 
     # Log an outbound HTTP request with timing
-    def log_request(method, url, request_data = {}, &block)
+    def log_request(method, url, request_data = {})
       return yield if block_given? && !configuration.enabled?
       return yield if block_given? && !configuration.should_log_url?(url)
 
@@ -36,7 +36,7 @@ module OutboundHttpLogger
         )
 
         response
-      rescue => e
+      rescue StandardError => e
         # Calculate duration even for failed requests
         end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         duration_seconds = end_time - start_time

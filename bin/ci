@@ -37,35 +37,50 @@ bundle install
 
 # Run tests
 print_header "Running Tests"
-test_files=(
-    "test/patches/test_net_http_patch.rb"
-    "test/concerns/test_outbound_logging.rb"
-    "test/integration/test_loggable_integration.rb"
-    "test/models/test_outbound_request_log.rb"
-    "test/test_outbound_http_logger.rb"
-)
 
-all_tests_passed=true
-for test_file in "${test_files[@]}"; do
-    if [[ -f "$test_file" ]]; then
-        print_status $BLUE "Running $test_file..."
-        if ! bundle exec ruby -Ilib:test "$test_file"; then
-            print_status $RED "❌ $test_file failed"
-            all_tests_passed=false
-        fi
-    fi
-done
+# Run all tests together (thread-safe with proper isolation)
+print_status $BLUE "Running all tests with strict isolation checking..."
+export STRICT_TEST_ISOLATION=true
 
-if $all_tests_passed; then
+if bundle exec rake test; then
     print_status $GREEN "✅ All tests passed"
 else
-    print_status $RED "❌ Some tests failed"
+    print_status $RED "❌ Tests failed"
     exit 1
 fi
 
+# Run database adapter tests if PostgreSQL is available
+if [[ -n "${TEST_POSTGRESQL:-}" ]] || [[ -n "${DATABASE_URL:-}" ]]; then
+    print_header "Running PostgreSQL Database Adapter Tests"
+
+    # Set PostgreSQL environment
+    export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:@localhost:5432/outbound_http_logger_test}"
+    export OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL="$DATABASE_URL"
+
+    print_status $BLUE "Testing PostgreSQL connection and adapters..."
+    if ./bin/test-databases; then
+        print_status $BLUE "Running database adapter tests with PostgreSQL..."
+        if bundle exec ruby -Itest test/test_database_adapters.rb; then
+            print_status $GREEN "✅ PostgreSQL database adapter tests passed"
+        else
+            print_status $RED "❌ PostgreSQL database adapter tests failed"
+            exit 1
+        fi
+    else
+        print_status $YELLOW "⚠️  PostgreSQL not available, skipping database adapter tests"
+    fi
+
+    # Clean up environment variables
+    unset DATABASE_URL
+    unset OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL
+fi
+
+# Clean up test environment
+unset STRICT_TEST_ISOLATION
+
 # Run RuboCop
 print_header "Running RuboCop"
-if bundle exec rubocop . --config ./.rubocop.yml; then
+if bundle exec rake rubocop; then
     print_status $GREEN "✅ RuboCop passed"
 else
     print_status $YELLOW "⚠️  RuboCop found issues (non-blocking for now)"
@@ -82,7 +97,9 @@ fi
 
 # Validate gemspec
 print_header "Validating Gemspec"
-if bundle exec gem specification pkg/*.gem > /dev/null; then
+# Get the most recently built gem file
+LATEST_GEM=$(ls -t pkg/*.gem | head -n 1)
+if [ -f "$LATEST_GEM" ] && bundle exec gem specification "$LATEST_GEM" > /dev/null; then
     print_status $GREEN "✅ Gemspec is valid"
 else
     print_status $RED "❌ Gemspec validation failed"
