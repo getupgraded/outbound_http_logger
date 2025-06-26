@@ -20,8 +20,8 @@ Gem::Specification.new do |spec|
   spec.extra_rdoc_files = ['LICENSE.txt']
 
   # Runtime dependencies
-  spec.add_dependency 'activerecord', '>= 7.2.0'
-  spec.add_dependency 'activesupport', '>= 7.2.0'
+  spec.add_dependency 'activerecord', '>= 7.0.0'
+  spec.add_dependency 'activesupport', '>= 7.0.0'
   spec.add_dependency 'rack', '>= 2.0'
 
   # For more information and examples about making a new gem, check out our

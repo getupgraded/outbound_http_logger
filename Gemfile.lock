@@ -2,8 +2,8 @@ PATH
   remote: .
   specs:
     outbound_http_logger (0.1.0)
-      activerecord (>= 7.2.0)
-      activesupport (>= 7.2.0)
+      activerecord (>= 7.0.0)
+      activesupport (>= 7.0.0)
       rack (>= 2.0)
 
 GEM
@@ -114,9 +114,6 @@ GEM
     rubocop-ast (1.45.1)
       parser (>= 3.3.7.2)
       prism (~> 1.4)
-    rubocop-md (2.0.1)
-      lint_roller (~> 1.1)
-      rubocop (>= 1.72.1)
     rubocop-minitest (0.38.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
@@ -175,7 +172,6 @@ DEPENDENCIES
   pg (~> 1.5)
   rake (~> 13.0)
   rubocop (~> 1.75)
-  rubocop-md (~> 2.0)
   rubocop-minitest (~> 0.38)
   rubocop-packaging (~> 0.6)
   rubocop-performance (~> 1.18)

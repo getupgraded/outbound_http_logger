@@ -6,7 +6,6 @@ plugins:
 - rubocop-thread_safety
 - rubocop-minitest
 - rubocop-performance
-- rubocop-md
 - rubocop-packaging
 - rubocop-rake
 

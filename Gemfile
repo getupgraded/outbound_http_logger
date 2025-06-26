@@ -17,7 +17,6 @@ group :development, :test do
   gem 'pg', '~> 1.5'
   gem 'rake', '~> 13.0'
   gem 'rubocop', '~> 1.75'
-  gem 'rubocop-md', '~> 2.0'
   gem 'rubocop-minitest', '~> 0.38'
   gem 'rubocop-packaging', '~> 0.6'
   gem 'rubocop-performance', '~> 1.18'

@@ -22,8 +22,7 @@
 - ✅ Include database adapter tests in CI suite with separate task for optimal performance
 
 ### Dependency Management
-- Audit and remove unused development dependencies
-- Test and relax version constraints where possible
+- ✅ Remove unused development dependencies (rubocop-md) and relax ActiveRecord/ActiveSupport constraints to >= 7.0.0
 - Add graceful handling for optional HTTP libraries
 
 ### Architecture Enhancements
