@@ -4,8 +4,6 @@ module OutboundHTTPLogger
   # Encapsulates all thread-local data management for OutboundHTTPLogger
   # Provides controlled access and automatic cleanup for thread isolation
   class ThreadContext
-    # NOTE: Using Thread.current instead of ThreadLocalVar to avoid circular dependencies
-
     # User-facing attributes that can be set by application code
     USER_ATTRIBUTES = %i[
       metadata

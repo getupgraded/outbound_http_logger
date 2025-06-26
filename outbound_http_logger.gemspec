@@ -12,7 +12,6 @@ Gem::Specification.new do |spec|
   spec.description           = 'A gem for logging outbound HTTP requests with support for multiple HTTP libraries (Net::HTTP, Faraday, HTTParty), sensitive data filtering, and configurable exclusions.'
   spec.homepage              = 'https://github.com/getupgraded/outbound_http_logger'
   spec.license               = 'MIT'
-  # Ruby 3.4 is not required; the gem works with Ruby 3.2+
   spec.required_ruby_version = '>= 3.2.0'
 
   # Specify which files should be added to the gem when it is released.
