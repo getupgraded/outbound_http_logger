@@ -127,7 +127,7 @@ module OutboundHttpLogger
                 log_data = prepare_json_data_for_postgresql(log_data)
 
                 create!(log_data)
-              rescue => e
+              rescue StandardError => e
                 # Failsafe: Never let logging errors break the HTTP request
                 logger = OutboundHttpLogger.configuration.get_logger
                 logger&.error("OutboundHttpLogger: Failed to log request: #{e.class}: #{e.message}")
@@ -196,7 +196,7 @@ module OutboundHttpLogger
         end
 
         def build_create_table_sql
-          <<~SQL
+          <<~SQL.squish
             CREATE TABLE IF NOT EXISTS outbound_request_logs (
               id BIGSERIAL PRIMARY KEY,
               http_method VARCHAR(10) NOT NULL,

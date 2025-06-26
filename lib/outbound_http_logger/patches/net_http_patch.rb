@@ -2,7 +2,7 @@
 
 module OutboundHttpLogger
   module Patches
-    module NetHttpPatch
+    module NetHTTPPatch
       @mutex = Mutex.new
       @applied = false
 
@@ -15,7 +15,7 @@ module OutboundHttpLogger
           Net::HTTP.prepend(InstanceMethods)
           @applied = true
 
-          OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: Net::HTTP patch applied") if OutboundHttpLogger.configuration.debug_logging
+          OutboundHttpLogger.configuration.get_logger&.debug('OutboundHttpLogger: Net::HTTP patch applied') if OutboundHttpLogger.configuration.debug_logging
         end
       end
 
@@ -28,7 +28,7 @@ module OutboundHttpLogger
       end
 
       module InstanceMethods
-        def request(req, body = nil, &block)
+        def request(req, body = nil, &)
           # Get configuration first to check if logging is enabled
           config = OutboundHttpLogger.configuration
 
@@ -46,7 +46,7 @@ module OutboundHttpLogger
           # Build the full URL (omit default ports)
           scheme       = use_ssl? ? 'https' : 'http'
           default_port = use_ssl? ? 443 : 80
-          port_part    = (port == default_port) ? '' : ":#{port}"
+          port_part    = port == default_port ? '' : ":#{port}"
           url          = "#{scheme}://#{address}#{port_part}#{req.path}"
 
           # Early exit if URL should be excluded (before setting recursion flag)
@@ -56,7 +56,6 @@ module OutboundHttpLogger
           config.increment_recursion_depth(library_name)
 
           begin
-
             # Capture request data
             request_data = {
               headers: extract_request_headers(req),
@@ -94,7 +93,7 @@ module OutboundHttpLogger
             end
 
             response
-          rescue => e
+          rescue StandardError => e
             # Log failed requests too
             end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             duration_seconds = end_time - start_time

@@ -2,7 +2,7 @@
 
 module OutboundHttpLogger
   module Patches
-    module HttppartyPatch
+    module HTTPartyPatch
       @mutex = Mutex.new
       @applied = false
 
@@ -16,7 +16,7 @@ module OutboundHttpLogger
           HTTParty::Request.prepend(RequestMethods)
           @applied = true
 
-          OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: HTTParty patch applied") if OutboundHttpLogger.configuration.debug_logging
+          OutboundHttpLogger.configuration.get_logger&.debug('OutboundHttpLogger: HTTParty patch applied') if OutboundHttpLogger.configuration.debug_logging
         end
       end
 
@@ -29,7 +29,7 @@ module OutboundHttpLogger
       end
 
       module RequestMethods
-        def perform(&block)
+        def perform(&)
           # Get configuration first to check if logging is enabled
           config = OutboundHttpLogger.configuration
 
@@ -54,7 +54,6 @@ module OutboundHttpLogger
           config.increment_recursion_depth(library_name)
 
           begin
-
             # Capture request data
             request_data = {
               headers: options[:headers] || {},
@@ -92,7 +91,7 @@ module OutboundHttpLogger
             end
 
             response
-          rescue => e
+          rescue StandardError => e
             # Log failed requests too
             end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             duration_seconds = end_time - start_time

@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "test_helper"
-require "outbound_http_logger/test"
-require "minitest/autorun"
+require 'test_helper'
+require 'outbound_http_logger/test'
+require 'minitest/autorun'
 
 class TestDatabaseAdapters < Minitest::Test
   def setup
@@ -27,7 +27,7 @@ class TestDatabaseAdapters < Minitest::Test
 
     assert_equal 'sqlite3:///tmp/test_outbound.sqlite3', adapter.database_url
     assert_equal :test_connection, adapter.connection_name
-    assert adapter.adapter_available?, 'SQLite adapter should be available'
+    assert_predicate adapter, :adapter_available?, 'SQLite adapter should be available'
   end
 
   def test_sqlite_adapter_logging
@@ -44,8 +44,8 @@ class TestDatabaseAdapters < Minitest::Test
     adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
 
     # Debug: check if adapter is enabled
-    assert adapter.enabled?, "Adapter should be enabled"
-    assert OutboundHttpLogger.enabled?, "OutboundHttpLogger should be enabled"
+    assert_predicate adapter, :enabled?, 'Adapter should be enabled'
+    assert_predicate OutboundHttpLogger, :enabled?, 'OutboundHttpLogger should be enabled'
 
     log_entry = adapter.log_request(
       :get,
@@ -55,11 +55,11 @@ class TestDatabaseAdapters < Minitest::Test
       0.5
     )
 
-    refute_nil log_entry
+    assert_not_nil log_entry
     assert_equal 'GET', log_entry.http_method
     assert_equal 'https://api.example.com/users', log_entry.url
     assert_equal 200, log_entry.status_code
-    assert_equal 500.0, log_entry.duration_ms
+    assert_in_delta(500.0, log_entry.duration_ms)
 
     # Test counting
     assert_equal 1, OutboundHttpLogger::Test.logs_count
@@ -82,7 +82,7 @@ class TestDatabaseAdapters < Minitest::Test
       0.3
     )
 
-    refute_nil log_entry
+    assert_not_nil log_entry
     model_class = adapter.model_class
 
     # Debug: Check what was actually stored
@@ -92,9 +92,11 @@ class TestDatabaseAdapters < Minitest::Test
     # Test JSON queries (these methods should be public now)
     # For SQLite, the JSON is stored as text, so we need to use the correct query format
     logs_with_name = model_class.with_request_containing('name', 'test')
+
     assert_equal 1, logs_with_name.count, "Should find log with name='test' in request body"
 
     logs_with_status = model_class.with_response_containing('status', 'created')
+
     assert_equal 1, logs_with_status.count, "Should find log with status='created' in response body"
   end
 
@@ -131,26 +133,25 @@ class TestDatabaseAdapters < Minitest::Test
       0.8
     )
 
-    refute_nil log_entry
+    assert_not_nil log_entry
     assert_equal 'POST', log_entry.http_method
     assert_equal 'https://api.example.com/webhook', log_entry.url
     assert_equal 202, log_entry.status_code
-    assert_equal 800.0, log_entry.duration_ms
+    assert_in_delta(800.0, log_entry.duration_ms)
 
     # Test counting
     assert_equal 1, OutboundHttpLogger::Test.logs_count
 
     # Test JSON storage format for PostgreSQL
-    if postgresql_available?
-      # For PostgreSQL, JSON should be stored as objects, not strings
-      if log_entry.class.using_jsonb?
-        # Check raw storage - should be Hash objects for JSONB
-        assert_kind_of Hash, log_entry.read_attribute(:request_body)
-        assert_kind_of Hash, log_entry.read_attribute(:response_body)
-        assert_equal 456, log_entry.read_attribute(:request_body)['data']['id']
-        assert_equal true, log_entry.read_attribute(:response_body)['received']
-      end
-    end
+    return unless postgresql_available?
+    # For PostgreSQL, JSON should be stored as objects, not strings
+    return unless log_entry.class.using_jsonb?
+
+    # Check raw storage - should be Hash objects for JSONB
+    assert_kind_of Hash, log_entry.read_attribute(:request_body)
+    assert_kind_of Hash, log_entry.read_attribute(:response_body)
+    assert_equal 456, log_entry.read_attribute(:request_body)['data']['id']
+    assert log_entry.read_attribute(:response_body)['received']
   end
 
   def test_adapter_error_handling
@@ -165,7 +166,6 @@ class TestDatabaseAdapters < Minitest::Test
 
     # Test that the adapter doesn't raise exceptions even with problematic data
     # This should succeed since SQLite can handle binary data
-    log_entry = nil
     begin
       log_entry = adapter.log_request(
         :get,
@@ -175,8 +175,8 @@ class TestDatabaseAdapters < Minitest::Test
         0.1
       )
       # The log should be created successfully
-      refute_nil log_entry
-    rescue => e
+      assert_not_nil log_entry
+    rescue StandardError => e
       flunk "Expected no exception, but got: #{e.class}: #{e.message}"
     end
   end
@@ -196,10 +196,12 @@ class TestDatabaseAdapters < Minitest::Test
     )
 
     OutboundHttpLogger::Test.enable!
-    assert OutboundHttpLogger::Test.enabled?
+
+    assert_predicate OutboundHttpLogger::Test, :enabled?
 
     OutboundHttpLogger::Test.disable!
-    refute OutboundHttpLogger::Test.enabled?
+
+    assert_not OutboundHttpLogger::Test.enabled?
   end
 
   def test_test_utilities_log_counting
@@ -219,13 +221,14 @@ class TestDatabaseAdapters < Minitest::Test
       0.1
     )
 
-    refute_nil log_entry
+    assert_not_nil log_entry
     assert_equal 1, OutboundHttpLogger::Test.logs_count
 
     analysis = OutboundHttpLogger::Test.analyze
+
     assert_equal 1, analysis[:total]
     assert_equal 1, analysis[:successful]
-    assert_equal 100.0, analysis[:success_rate]
+    assert_in_delta(100.0, analysis[:success_rate])
   end
 
   def test_postgresql_adapter_json_conversion
@@ -246,11 +249,11 @@ class TestDatabaseAdapters < Minitest::Test
 
     # Test the prepare_json_data_for_postgresql method directly
     test_data = {
-      request_headers: { "Content-Type" => "application/json" },
-      response_headers: { "Accept" => "application/json" },
+      request_headers: { 'Content-Type' => 'application/json' },
+      response_headers: { 'Accept' => 'application/json' },
       request_body: '{"name": "test", "type": "user"}',
       response_body: '{"id": 123, "status": "created"}',
-      metadata: { "action" => "test" }
+      metadata: { 'action' => 'test' }
     }
 
     model_class = adapter.model_class
@@ -264,10 +267,10 @@ class TestDatabaseAdapters < Minitest::Test
     # JSON string bodies should be converted to objects
     assert_kind_of Hash, optimized_data[:request_body]
     assert_kind_of Hash, optimized_data[:response_body]
-    assert_equal "test", optimized_data[:request_body]["name"]
-    assert_equal "user", optimized_data[:request_body]["type"]
-    assert_equal 123, optimized_data[:response_body]["id"]
-    assert_equal "created", optimized_data[:response_body]["status"]
+    assert_equal 'test', optimized_data[:request_body]['name']
+    assert_equal 'user', optimized_data[:request_body]['type']
+    assert_equal 123, optimized_data[:response_body]['id']
+    assert_equal 'created', optimized_data[:response_body]['status']
   end
 
   def test_configuration_backup_restore
@@ -278,7 +281,7 @@ class TestDatabaseAdapters < Minitest::Test
 
     # Modify configuration
     OutboundHttpLogger::Test.with_configuration(enabled: false) do
-      refute OutboundHttpLogger.enabled?
+      assert_not OutboundHttpLogger.enabled?
     end
 
     # Configuration should be restored after block

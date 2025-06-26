@@ -144,7 +144,7 @@ module OutboundHttpLogger
                 log_data = optimize_for_sqlite(log_data)
 
                 create!(log_data)
-              rescue => e
+              rescue StandardError => e
                 # Failsafe: Never let logging errors break the HTTP request
                 logger = OutboundHttpLogger.configuration.get_logger
                 logger&.error("OutboundHttpLogger: Failed to log request: #{e.class}: #{e.message}")
@@ -193,7 +193,7 @@ module OutboundHttpLogger
               private
 
                 def build_create_table_sql
-                  <<~SQL
+                  <<~SQL.squish
                     CREATE TABLE IF NOT EXISTS outbound_request_logs (
                       id INTEGER PRIMARY KEY AUTOINCREMENT,
                       http_method TEXT NOT NULL,
@@ -222,26 +222,24 @@ module OutboundHttpLogger
                   ]
                 end
 
-              def optimize_for_sqlite(log_data)
-                # For SQLite, ensure JSON fields are properly serialized
-                %i[request_headers request_body response_headers response_body metadata].each do |field|
-                  log_data[field] = serialize_json_field(log_data[field]) if log_data[field]
+                def optimize_for_sqlite(log_data)
+                  # For SQLite, ensure JSON fields are properly serialized
+                  %i[request_headers request_body response_headers response_body metadata].each do |field|
+                    log_data[field] = serialize_json_field(log_data[field]) if log_data[field]
+                  end
+                  log_data
                 end
-                log_data
-              end
 
-              def serialize_json_field(value)
-                return nil if value.nil?
-                return value if value.is_a?(String)
+                def serialize_json_field(value)
+                  return nil if value.nil?
+                  return value if value.is_a?(String)
 
-                begin
-                  value.to_json
-                rescue StandardError
-                  value.to_s
+                  begin
+                    value.to_json
+                  rescue StandardError
+                    value.to_s
+                  end
                 end
-              end
-
-
             end
           end
 
@@ -250,8 +248,6 @@ module OutboundHttpLogger
 
           klass
         end
-
-
     end
   end
 end

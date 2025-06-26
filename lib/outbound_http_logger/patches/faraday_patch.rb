@@ -16,7 +16,7 @@ module OutboundHttpLogger
           Faraday::Connection.prepend(ConnectionMethods)
           @applied = true
 
-          OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger: Faraday patch applied") if OutboundHttpLogger.configuration.debug_logging
+          OutboundHttpLogger.configuration.get_logger&.debug('OutboundHttpLogger: Faraday patch applied') if OutboundHttpLogger.configuration.debug_logging
         end
       end
 
@@ -29,7 +29,7 @@ module OutboundHttpLogger
       end
 
       module ConnectionMethods
-        def run_request(method, url, body, headers, &block)
+        def run_request(method, url, body, headers, &)
           # Get configuration first to check if logging is enabled
           config = OutboundHttpLogger.configuration
 
@@ -45,7 +45,7 @@ module OutboundHttpLogger
           end
 
           # Build the full URL first (before setting recursion flag)
-          full_url = self.build_url(url)
+          full_url = build_url(url)
 
           # Early exit if URL should be excluded (before setting recursion flag)
           return super unless config.should_log_url?(full_url.to_s)
@@ -54,7 +54,6 @@ module OutboundHttpLogger
           config.increment_recursion_depth(library_name)
 
           begin
-
             # Capture request data
             request_data = {
               headers: headers || {},
@@ -92,7 +91,7 @@ module OutboundHttpLogger
             end
 
             response
-          rescue => e
+          rescue StandardError => e
             # Log failed requests too
             end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             duration_seconds = end_time - start_time
@@ -124,6 +123,18 @@ module OutboundHttpLogger
             config.decrement_recursion_depth(library_name)
           end
         end
+
+        private
+
+          def build_url(url)
+            # If url is already absolute, return it as-is
+            return url if url.to_s.start_with?('http://', 'https://')
+
+            # Build URL from connection's base URL and the relative path
+            base_url = url_prefix.to_s.chomp('/')
+            relative_url = url.to_s.start_with?('/') ? url.to_s : "/#{url}"
+            "#{base_url}#{relative_url}"
+          end
       end
     end
   end

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'logger'
+require 'stringio'
+
 module OutboundHttpLogger
   class Configuration
     attr_accessor :enabled,
@@ -33,23 +36,23 @@ module OutboundHttpLogger
         'audio/',
         'font/'
       ]
-      @sensitive_headers = [
-        'authorization',
-        'cookie',
-        'set-cookie',
-        'x-api-key',
-        'x-auth-token',
-        'x-access-token',
-        'bearer'
+      @sensitive_headers = %w[
+        authorization
+        cookie
+        set-cookie
+        x-api-key
+        x-auth-token
+        x-access-token
+        bearer
       ]
-      @sensitive_body_keys = [
-        'password',
-        'secret',
-        'token',
-        'key',
-        'auth',
-        'credential',
-        'private'
+      @sensitive_body_keys = %w[
+        password
+        secret
+        token
+        key
+        auth
+        credential
+        private
       ]
       @max_body_size          = 10_000 # 10KB
       @debug_logging          = false
@@ -60,8 +63,8 @@ module OutboundHttpLogger
       @secondary_database_adapter = :sqlite
 
       # Recursion detection configuration
-      @max_recursion_depth = 3  # Maximum allowed recursion depth before raising error
-      @strict_recursion_detection = false  # Whether to raise errors on recursion detection
+      @max_recursion_depth = 3 # Maximum allowed recursion depth before raising error
+      @strict_recursion_detection = false # Whether to raise errors on recursion detection
     end
 
     def enabled?
@@ -70,13 +73,13 @@ module OutboundHttpLogger
 
     def should_log_url?(url)
       return false unless enabled?
-      return false if url.nil? || url.empty?
+      return false if url.blank?
 
       @excluded_urls.none? { |pattern| pattern.match?(url) }
     end
 
     def should_log_content_type?(content_type)
-      return true if content_type.nil? || content_type.empty?
+      return true if content_type.blank?
 
       # Handle both String and Array content types (Rails 7 compatibility)
       content_type_str = case content_type
@@ -94,8 +97,44 @@ module OutboundHttpLogger
     end
 
     def get_logger
-      @logger || (defined?(Rails) ? Rails.logger : nil)
+      return @logger if @logger
+
+      # Try Rails.logger if Rails is available and has a working logger
+      return Rails.logger if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
+
+      # Fallback to a default logger
+      @get_logger ||= create_fallback_logger
     end
+
+    private
+
+      def create_fallback_logger
+        # In test environments, use a quiet logger unless debugging
+        if test_environment?
+          ::Logger.new(StringIO.new)
+        else
+          # In non-test environments, log to stderr for visibility
+          ::Logger.new($stderr)
+        end
+      end
+
+      def test_environment?
+        # Check various ways to detect test environment
+        (defined?(Rails) && Rails.env&.test?) ||
+          ENV['RACK_ENV'] == 'test' ||
+          ENV['RAILS_ENV'] == 'test' ||
+          ENV['RUBY_ENV'] == 'test' ||
+          # Check if we're running under common test frameworks
+          (defined?(Minitest) && $PROGRAM_NAME.include?('test')) ||
+          (defined?(RSpec) && $PROGRAM_NAME.include?('rspec')) ||
+          # Check if test gems are loaded
+          defined?(Minitest::Test) ||
+          defined?(RSpec::Core) ||
+          # Check command line patterns
+          ($PROGRAM_NAME.include?('rake') && ARGV.include?('test'))
+      end
+
+    public
 
     # Recursion detection and prevention
     def check_recursion_depth!(library_name)
@@ -104,23 +143,23 @@ module OutboundHttpLogger
       depth_key = :"outbound_http_logger_depth_#{library_name}"
       current_depth = Thread.current[depth_key] || 0
 
-      if current_depth >= @max_recursion_depth
-        error_msg = "OutboundHttpLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
-                   "This usually indicates that the HTTP library is being used within the logging process itself. " \
-                   "Check your logger configuration and database connection settings."
+      return unless current_depth >= @max_recursion_depth
 
-        # Log the error if possible (but don't use HTTP logging!)
-        if get_logger && !Thread.current[:outbound_http_logger_logging_error]
-          Thread.current[:outbound_http_logger_logging_error] = true
-          begin
-            get_logger.error(error_msg)
-          ensure
-            Thread.current[:outbound_http_logger_logging_error] = false
-          end
+      error_msg = "OutboundHttpLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
+                  'This usually indicates that the HTTP library is being used within the logging process itself. ' \
+                  'Check your logger configuration and database connection settings.'
+
+      # Log the error if possible (but don't use HTTP logging!)
+      if get_logger && !Thread.current[:outbound_http_logger_logging_error]
+        Thread.current[:outbound_http_logger_logging_error] = true
+        begin
+          get_logger.error(error_msg)
+        ensure
+          Thread.current[:outbound_http_logger_logging_error] = false
         end
-
-        raise OutboundHttpLogger::InfiniteRecursionError, error_msg
       end
+
+      raise OutboundHttpLogger::InfiniteRecursionError, error_msg
     end
 
     def increment_recursion_depth(library_name)
@@ -134,7 +173,7 @@ module OutboundHttpLogger
       new_depth = [current_depth - 1, 0].max
 
       # Set to nil when depth reaches 0 to indicate no active recursion tracking
-      Thread.current[depth_key] = new_depth == 0 ? nil : new_depth
+      Thread.current[depth_key] = new_depth.zero? ? nil : new_depth
     end
 
     def current_recursion_depth(library_name)
@@ -143,7 +182,7 @@ module OutboundHttpLogger
     end
 
     def in_recursion?(library_name)
-      current_recursion_depth(library_name) > 0
+      current_recursion_depth(library_name).positive?
     end
 
     # Secondary database configuration
@@ -168,9 +207,7 @@ module OutboundHttpLogger
       filtered = headers.dup
       @sensitive_headers.each do |sensitive_header|
         filtered.each_key do |key|
-          if key.to_s.downcase == sensitive_header.downcase
-            filtered[key] = '[FILTERED]'
-          end
+          filtered[key] = '[FILTERED]' if key.to_s.downcase == sensitive_header.downcase
         end
       end
       filtered
@@ -204,9 +241,7 @@ module OutboundHttpLogger
         filtered = hash.dup
         @sensitive_body_keys.each do |sensitive_key|
           filtered.each_key do |key|
-            if key.to_s.downcase.include?(sensitive_key.downcase)
-              filtered[key] = '[FILTERED]'
-            end
+            filtered[key] = '[FILTERED]' if key.to_s.downcase.include?(sensitive_key.downcase)
           end
         end
 

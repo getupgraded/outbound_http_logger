@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'set'
 require 'rack'
 
 module OutboundHttpLogger
@@ -43,8 +42,10 @@ module OutboundHttpLogger
       # Memoized for performance since this is called on every log entry
       def self.using_jsonb?
         # Use instance variable for memoization that can be reset
-        @using_jsonb = connection.adapter_name == 'PostgreSQL' &&
-                       columns_hash['response_body']&.sql_type == 'jsonb' if @using_jsonb.nil?
+        if @using_jsonb.nil?
+          @using_jsonb = connection.adapter_name == 'PostgreSQL' &&
+                         columns_hash['response_body']&.sql_type == 'jsonb'
+        end
         @using_jsonb
       end
 
@@ -90,20 +91,16 @@ module OutboundHttpLogger
             metadata: merged_metadata
           }
 
-
-
           # Apply database-specific optimizations
           log_data = optimize_for_database(log_data)
 
           create!(log_data)
-        rescue => e
+        rescue StandardError => e
           # Failsafe: Never let logging errors break the HTTP request
           logger = OutboundHttpLogger.configuration.get_logger
           logger&.error("OutboundHttpLogger: Failed to log request: #{e.class}: #{e.message}")
           nil
         end
-
-
 
         # Search logs by various criteria
         def search(params = {})
@@ -137,19 +134,25 @@ module OutboundHttpLogger
 
           # Filter by date range
           if params[:start_date].present?
-            start_date = Time.zone.parse(params[:start_date]).beginning_of_day rescue nil
+            start_date = begin
+              Time.zone.parse(params[:start_date]).beginning_of_day
+            rescue StandardError
+              nil
+            end
             scope      = scope.where('created_at >= ?', start_date) if start_date
           end
 
           if params[:end_date].present?
-            end_date = Time.zone.parse(params[:end_date]).end_of_day rescue nil
-            scope    = scope.where('created_at <= ?', end_date) if end_date
+            end_date = begin
+              Time.zone.parse(params[:end_date]).end_of_day
+            rescue StandardError
+              nil
+            end
+            scope = scope.where('created_at <= ?', end_date) if end_date
           end
 
           # Filter slow requests
-          if params[:slow_threshold].present?
-            scope = scope.slow(params[:slow_threshold].to_i)
-          end
+          scope = scope.slow(params[:slow_threshold].to_i) if params[:slow_threshold].present?
 
           scope
         end
@@ -175,8 +178,6 @@ module OutboundHttpLogger
         def total_requests
           count
         end
-
-
 
         # Database-specific text search
         def apply_text_search(scope, q, original_query)
@@ -348,7 +349,7 @@ module OutboundHttpLogger
 
       # Additional instance methods from base class
       def successful?
-        (200..299).include?(status_code)
+        (200..299).cover?(status_code)
       end
 
       def failed?
@@ -357,7 +358,7 @@ module OutboundHttpLogger
 
       def parsed_request_headers
         raw_headers = read_attribute(:request_headers)
-        return {} unless raw_headers.present?
+        return {} if raw_headers.blank?
 
         case raw_headers
         when String
@@ -373,7 +374,7 @@ module OutboundHttpLogger
 
       def parsed_response_headers
         raw_headers = read_attribute(:response_headers)
-        return {} unless raw_headers.present?
+        return {} if raw_headers.blank?
 
         case raw_headers
         when String
@@ -389,7 +390,7 @@ module OutboundHttpLogger
 
       def parsed_metadata
         raw_metadata = read_attribute(:metadata)
-        return {} unless raw_metadata.present?
+        return {} if raw_metadata.blank?
 
         case raw_metadata
         when String
@@ -446,7 +447,5 @@ module OutboundHttpLogger
           end
         end
     end
-
-
   end
 end

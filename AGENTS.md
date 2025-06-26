@@ -34,7 +34,7 @@ end
 **Critical Production Safety**: All HTTP library patches use mutex synchronization to prevent race conditions during concurrent patch application:
 
 ```ruby
-module NetHttpPatch
+module NetHTTPPatch
   @mutex = Mutex.new
   @applied = false
 

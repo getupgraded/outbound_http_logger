@@ -1,19 +1,19 @@
 # frozen_string_literal: true
 
-require "active_record"
-require "active_support"
+require 'active_record'
+require 'active_support'
 
-require_relative "outbound_http_logger/version"
-require_relative "outbound_http_logger/configuration"
-require_relative "outbound_http_logger/database_adapters/postgresql_adapter"
-require_relative "outbound_http_logger/database_adapters/sqlite_adapter"
-require_relative "outbound_http_logger/models/outbound_request_log"
-require_relative "outbound_http_logger/concerns/outbound_logging"
-require_relative "outbound_http_logger/patches/net_http_patch"
-require_relative "outbound_http_logger/patches/faraday_patch"
-require_relative "outbound_http_logger/patches/httparty_patch"
-require_relative "outbound_http_logger/logger"
-require_relative "outbound_http_logger/railtie" if defined?(Rails)
+require_relative 'outbound_http_logger/version'
+require_relative 'outbound_http_logger/configuration'
+require_relative 'outbound_http_logger/database_adapters/postgresql_adapter'
+require_relative 'outbound_http_logger/database_adapters/sqlite_adapter'
+require_relative 'outbound_http_logger/models/outbound_request_log'
+require_relative 'outbound_http_logger/concerns/outbound_logging'
+require_relative 'outbound_http_logger/patches/net_http_patch'
+require_relative 'outbound_http_logger/patches/faraday_patch'
+require_relative 'outbound_http_logger/patches/httparty_patch'
+require_relative 'outbound_http_logger/logger'
+require_relative 'outbound_http_logger/railtie' if defined?(Rails)
 
 module OutboundHttpLogger
   class Error < StandardError; end
@@ -30,7 +30,7 @@ module OutboundHttpLogger
     # Global configuration instance (thread-safe)
     def global_configuration
       @config_mutex.synchronize do
-        @configuration ||= Configuration.new
+        @global_configuration ||= Configuration.new
       end
     end
 
@@ -77,9 +77,7 @@ module OutboundHttpLogger
     end
 
     # Check if logging is enabled
-    def enabled?
-      configuration.enabled?
-    end
+    delegate :enabled?, to: :configuration
 
     # Get the logger instance
     # Don't cache the logger since configuration can change (especially in tests)
@@ -163,7 +161,7 @@ module OutboundHttpLogger
     # WARNING: This will lose all customizations from initializers
     def reset_configuration!
       @config_mutex.synchronize do
-        @configuration = nil
+        @global_configuration = nil
         @logger = nil
       end
       # Also clear any thread-local overrides
@@ -182,9 +180,9 @@ module OutboundHttpLogger
 
     # Reset patch application state (for testing)
     def reset_patches!
-      Patches::NetHttpPatch.reset!
+      Patches::NetHTTPPatch.reset!
       Patches::FaradayPatch.reset!
-      Patches::HttppartyPatch.reset!
+      Patches::HTTPartyPatch.reset!
     end
 
     # Complete reset for testing (patches, configuration, thread data)
@@ -212,9 +210,9 @@ module OutboundHttpLogger
       def setup_patches
         return unless configuration.enabled?
 
-        Patches::NetHttpPatch.apply! if defined?(Net::HTTP)
+        Patches::NetHTTPPatch.apply! if defined?(Net::HTTP)
         Patches::FaradayPatch.apply! if defined?(Faraday)
-        Patches::HttppartyPatch.apply! if defined?(HTTParty)
+        Patches::HTTPartyPatch.apply! if defined?(HTTParty)
       end
 
       # Apply patches immediately when libraries are available

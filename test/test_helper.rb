@@ -1,60 +1,54 @@
 # frozen_string_literal: true
 
-$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
 # Load environment variables for testing
 begin
-  require "dotenv"
-  Dotenv.load(".env.test")
+  require 'dotenv'
+  Dotenv.load('.env.test')
 rescue LoadError
   # dotenv not available, continue without it
 end
 
-require "minitest/autorun"
-require "minitest/spec"
-require "mocha/minitest"
-require "logger"
-require "stringio"
-require "webmock/minitest"
-require "active_record"
+require 'minitest/autorun'
+require 'minitest/spec'
+require 'mocha/minitest'
+require 'logger'
+require 'stringio'
+require 'webmock/minitest'
+require 'active_record'
 
 # Load database adapters based on configuration
-database_adapter = ENV.fetch("DATABASE_ADAPTER", "sqlite3")
+database_adapter = ENV.fetch('DATABASE_ADAPTER', 'sqlite3')
 case database_adapter
-when "sqlite3"
-  require "sqlite3"
-when "postgresql"
-  require "pg"
+when 'sqlite3'
+  require 'sqlite3'
+when 'postgresql'
+  require 'pg'
 else
   raise "Unsupported database adapter: #{database_adapter}"
 end
 
-require "outbound_http_logger"
+require 'outbound_http_logger'
 
 # Set up database for testing based on environment
 def setup_test_database
-  database_adapter = ENV.fetch("DATABASE_ADAPTER", "sqlite3")
-  database_url = ENV["DATABASE_URL"]
+  database_adapter = ENV.fetch('DATABASE_ADAPTER', 'sqlite3')
+  database_url = ENV.fetch('DATABASE_URL', nil)
 
   case database_adapter
-  when "sqlite3"
+  when 'sqlite3'
     ActiveRecord::Base.establish_connection(
       adapter: 'sqlite3',
       database: database_url || ':memory:'
     )
-  when "postgresql"
-    if database_url
-      ActiveRecord::Base.establish_connection(database_url)
-    else
-      ActiveRecord::Base.establish_connection(
-        adapter: 'postgresql',
-        host: ENV.fetch("POSTGRES_HOST", "localhost"),
-        port: ENV.fetch("POSTGRES_PORT", "5432"),
-        database: ENV.fetch("POSTGRES_DB", "outbound_http_logger_test"),
-        username: ENV.fetch("POSTGRES_USER", "postgres"),
-        password: ENV["POSTGRES_PASSWORD"]
-      )
-    end
+  when 'postgresql'
+    ActiveRecord::Base.establish_connection(database_url || { adapter: 'postgresql',
+                                                              host: ENV.fetch('POSTGRES_HOST', 'localhost'),
+                                                              port: ENV.fetch('POSTGRES_PORT', '5432'),
+                                                              database: ENV.fetch('POSTGRES_DB', 'outbound_http_logger_test'),
+                                                              username: ENV.fetch('POSTGRES_USER', 'postgres'),
+                                                              password: ENV.fetch('POSTGRES_PASSWORD', nil) })
   else
     raise "Unsupported database adapter: #{database_adapter}"
   end
@@ -85,7 +79,7 @@ ActiveRecord::Schema.define do
 
   # Essential indexes for append-only logging (minimal set)
   add_index :outbound_request_logs, :created_at
-  add_index :outbound_request_logs, [:loggable_type, :loggable_id]
+  add_index :outbound_request_logs, %i[loggable_type loggable_id]
 end
 
 # JSON columns are automatically handled in Rails 8.0+
@@ -95,6 +89,9 @@ module TestHelpers
   def setup
     # Reset configuration to defaults
     OutboundHttpLogger.reset_configuration!
+
+    # Reset patch application state
+    OutboundHttpLogger.reset_patches!
 
     # Clear all logs
     OutboundHttpLogger::Models::OutboundRequestLog.delete_all
@@ -113,7 +110,7 @@ module TestHelpers
         assert_no_leftover_thread_data!
         # Check configuration BEFORE we clean it up
         assert_configuration_unchanged!
-      rescue => e
+      rescue StandardError => e
         # Log the error but don't fail the test - just warn
         puts "\n⚠️  #{e.message}"
       end
@@ -194,9 +191,7 @@ module TestHelpers
     }
 
     config_checks.each do |key, (current, default)|
-      unless current == default
-        changes << "  #{key}: #{current.inspect} (expected: #{default.inspect})"
-      end
+      changes << "  #{key}: #{current.inspect} (expected: #{default.inspect})" unless current == default
     end
 
     return if changes.empty?
@@ -245,15 +240,13 @@ module TestHelpers
     scope = scope.where(http_method: method.to_s.upcase) if method
     scope = scope.where(url: url) if url
 
-    assert_equal 0, scope.count, "Expected no requests to be logged"
+    assert_equal 0, scope.count, 'Expected no requests to be logged'
   end
 
   # Thread-safe configuration override for simple attribute changes
   # This is the recommended method for parallel testing
-  def with_thread_safe_configuration(**overrides)
-    OutboundHttpLogger.with_configuration(**overrides) do
-      yield
-    end
+  def with_thread_safe_configuration(**overrides, &)
+    OutboundHttpLogger.with_configuration(**overrides, &)
   end
 
   # New adapter-based test helpers
@@ -282,8 +275,8 @@ module TestHelpers
   end
 
   # Execute a block with modified configuration, then restore original
-  def with_outbound_http_logger_configuration(**options, &block)
-    OutboundHttpLogger::Test.with_configuration(**options, &block)
+  def with_outbound_http_logger_configuration(**, &)
+    OutboundHttpLogger::Test.with_configuration(**, &)
   end
 
   # Setup test with isolated configuration (recommended for most tests)
@@ -315,7 +308,7 @@ module TestHelpers
       log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
     end
 
-    assert !logs.empty?, "Expected outbound request to be logged: #{method.upcase} #{url}"
+    assert_not logs.empty?, "Expected outbound request to be logged: #{method.upcase} #{url}"
     logs.first
   end
 
@@ -363,3 +356,4 @@ end
 
 # Include test helpers in all test classes
 Minitest::Test.include(TestHelpers)
+Minitest::Spec.include(TestHelpers)

@@ -23,7 +23,7 @@ A production-safe gem for comprehensive outbound HTTP request logging in Rails a
 Add to your Gemfile:
 
 ```ruby
-gem 'outbound_http_logger', git: "https://github.com/getupgraded/outbound_http_logger.git" # this is not a published gem yet
+gem 'outbound_http_logger', git: 'https://github.com/getupgraded/outbound_http_logger.git' # this is not a published gem yet
 ```
 
 Run the generator to create the database migration:
@@ -98,7 +98,7 @@ If you want to **also** log to a separate database (in addition to your main Rai
 ```ruby
 # config/initializers/outbound_http_logger.rb
 OutboundHttpLogger.configure do |config|
-  config.enabled = true  # Main Rails database logging
+  config.enabled = true # Main Rails database logging
 
   # OPTIONAL: Also log to an additional database
 
@@ -109,7 +109,7 @@ OutboundHttpLogger.configure do |config|
   config.configure_secondary_database('postgresql://user:pass@host/logs_db')
 
   # Or use environment variable
-  config.configure_secondary_database(ENV['OUTBOUND_LOGGING_DATABASE_URL'])
+  config.configure_secondary_database(ENV.fetch('OUTBOUND_LOGGING_DATABASE_URL', nil))
 end
 ```
 
@@ -246,7 +246,7 @@ recent_logs.each do |log|
   puts "#{log.http_method} #{log.url} -> #{log.status_code} (#{log.formatted_duration})"
   puts "Associated with: #{log.loggable.class.name}##{log.loggable.id}" if log.loggable
   puts "Metadata: #{log.metadata}" if log.metadata.present?
-  puts "---"
+  puts '---'
 end
 ```
 
@@ -257,7 +257,7 @@ The gem provides a dedicated test namespace with powerful utilities for testing 
 ### Test Configuration
 
 ```ruby
-require 'outbound_http_logger/test'  # Required for test utilities
+require 'outbound_http_logger/test' # Required for test utilities
 
 # Configure test logging with separate database
 OutboundHttpLogger::Test.configure(
@@ -281,7 +281,7 @@ OutboundHttpLogger::Test.disable!
 ### Test Utilities API
 
 ```ruby
-require 'outbound_http_logger/test'  # Required for test utilities
+require 'outbound_http_logger/test' # Required for test utilities
 
 # Count all logged outbound requests during tests
 total_requests = OutboundHttpLogger::Test.logs_count
@@ -318,27 +318,29 @@ OutboundHttpLogger::Test.reset!
 
 ```ruby
 # test/test_helper.rb
-require 'outbound_http_logger/test'  # Required for test utilities
+require 'outbound_http_logger/test' # Required for test utilities
 
-class ActiveSupport::TestCase
-  include OutboundHttpLogger::Test::Helpers
+module ActiveSupport
+  class TestCase
+    include OutboundHttpLogger::Test::Helpers
 
-  setup do
-    setup_outbound_http_logger_test(
-      database_url: 'sqlite3:///tmp/test_outbound_requests.sqlite3'
-    )
-  end
+    setup do
+      setup_outbound_http_logger_test(
+        database_url: 'sqlite3:///tmp/test_outbound_requests.sqlite3'
+      )
+    end
 
-  teardown do
-    teardown_outbound_http_logger_test
+    teardown do
+      teardown_outbound_http_logger_test
+    end
   end
 end
 
 # In your tests
 class APIIntegrationTest < ActiveSupport::TestCase
-  test "logs outbound API requests correctly" do
+  test 'logs outbound API requests correctly' do
     # Stub external API
-    stub_request(:post, "https://api.example.com/users")
+    stub_request(:post, 'https://api.example.com/users')
       .to_return(status: 201, body: '{"id": 123}')
 
     # Make outbound request
@@ -353,9 +355,9 @@ class APIIntegrationTest < ActiveSupport::TestCase
     assert_equal 1, OutboundHttpLogger::Test.logs_with_status(201).count
   end
 
-  test "analyzes outbound request patterns" do
-    stub_request(:get, "https://api.example.com/users").to_return(status: 200)
-    stub_request(:get, "https://api.example.com/missing").to_return(status: 404)
+  test 'analyzes outbound request patterns' do
+    stub_request(:get, 'https://api.example.com/users').to_return(status: 200)
+    stub_request(:get, 'https://api.example.com/missing').to_return(status: 404)
 
     HTTParty.get('https://api.example.com/users')    # 200
     HTTParty.get('https://api.example.com/missing')  # 404
@@ -372,7 +374,7 @@ end
 
 ```ruby
 # spec/rails_helper.rb
-require 'outbound_http_logger/test'  # Required for test utilities
+require 'outbound_http_logger/test' # Required for test utilities
 
 RSpec.configure do |config|
   config.include OutboundHttpLogger::Test::Helpers
@@ -387,9 +389,9 @@ RSpec.configure do |config|
 end
 
 # In your specs
-RSpec.describe "Outbound API logging" do
-  it "logs requests correctly" do
-    stub_request(:get, "https://api.example.com/users")
+RSpec.describe 'Outbound API logging' do
+  it 'logs requests correctly' do
+    stub_request(:get, 'https://api.example.com/users')
       .to_return(status: 200, body: '[]')
 
     HTTParty.get('https://api.example.com/users')
@@ -445,10 +447,10 @@ end
 #### Test Helper Integration
 
 ```ruby
-describe "My Feature" do
+describe 'My Feature' do
   include OutboundHttpLogger::Test::Helpers
 
-  it "logs requests with thread-safe configuration" do
+  it 'logs requests with thread-safe configuration' do
     # Uses the simplified thread-safe configuration system
     with_thread_safe_configuration(enabled: true, debug_logging: true) do
       # Configuration changes only affect current thread
@@ -465,8 +467,8 @@ end
 
 ```ruby
 # Multiple tests can run simultaneously without interference
-RSpec.describe "Parallel API tests", parallel: true do
-  it "test 1 with custom config" do
+RSpec.describe 'Parallel API tests', parallel: true do
+  it 'test 1 with custom config' do
     with_thread_safe_configuration(max_body_size: 5000, debug_logging: true) do
       # This configuration only affects this test thread
       HTTParty.post('https://api.example.com/large-data', body: large_payload)
@@ -474,7 +476,7 @@ RSpec.describe "Parallel API tests", parallel: true do
     end
   end
 
-  it "test 2 with different config" do
+  it 'test 2 with different config' do
     with_thread_safe_configuration(max_body_size: 1000, debug_logging: false) do
       # This configuration is isolated from test 1
       HTTParty.get('https://api.example.com/small-data')
@@ -492,7 +494,7 @@ end
 OutboundHttpLogger.configure do |config|
   # Exclude specific URL patterns
   config.excluded_urls << %r{/webhooks}
-  config.excluded_urls << %r{\.amazonaws\.com}
+  config.excluded_urls << /\.amazonaws\.com/
 
   # Exclude specific content types
   config.excluded_content_types << 'application/pdf'
@@ -552,11 +554,11 @@ The gem provides rollback-capable migrations with database-specific optimization
 
 ```ruby
 # The migration automatically detects your database and optimizes accordingly
-rails generate outbound_http_logger:migration
-rails db:migrate
+rails generate outbound_http_logger: migration
+rails db: migrate
 
 # Rollback support
-rails db:rollback
+rails db: rollback
 ```
 
 **Migration Features:**

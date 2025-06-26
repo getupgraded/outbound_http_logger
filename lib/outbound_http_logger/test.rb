@@ -138,8 +138,8 @@ module OutboundHttpLogger
       end
 
       # Execute a block with modified configuration, then restore original
-      def with_configuration(**options, &block)
-        OutboundHttpLogger.with_configuration(**options, &block)
+      def with_configuration(**, &)
+        OutboundHttpLogger.with_configuration(**, &)
       end
 
       private
@@ -169,8 +169,6 @@ module OutboundHttpLogger
             raise ArgumentError, "No default URL for adapter: #{adapter_type}"
           end
         end
-
-
     end
 
     # Test helpers module for inclusion in test classes
@@ -198,8 +196,8 @@ module OutboundHttpLogger
       end
 
       # Execute a block with modified configuration, then restore original
-      def with_outbound_http_logger_configuration(**options, &block)
-        OutboundHttpLogger::Test.with_configuration(**options, &block)
+      def with_outbound_http_logger_configuration(**, &)
+        OutboundHttpLogger::Test.with_configuration(**, &)
       end
 
       # Setup test with isolated configuration (recommended for most tests)
