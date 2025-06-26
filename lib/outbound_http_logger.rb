@@ -15,6 +15,7 @@ require_relative 'outbound_http_logger/patches/net_http_patch'
 require_relative 'outbound_http_logger/patches/faraday_patch'
 require_relative 'outbound_http_logger/patches/httparty_patch'
 require_relative 'outbound_http_logger/logger'
+require_relative 'outbound_http_logger/observability'
 require_relative 'outbound_http_logger/railtie' if defined?(Rails)
 
 module OutboundHTTPLogger
@@ -24,6 +25,7 @@ module OutboundHTTPLogger
   # Simple global configuration (not frequently changed, no atomic operations needed)
   @global_configuration = nil
   @logger = nil
+  @observability = nil
 
   class << self
     # Get the current configuration instance (checks for thread-local override first)
@@ -106,6 +108,15 @@ module OutboundHTTPLogger
     # @return [Logger] The logger instance for recording HTTP requests
     def logger
       Logger.new(configuration)
+    end
+
+    # Get the observability instance
+    # @return [Observability] The observability module for structured logging, metrics, and debugging
+    def observability
+      @observability ||= begin
+        Observability.initialize!(configuration)
+        Observability
+      end
     end
 
     # Set metadata for the current thread's outbound requests

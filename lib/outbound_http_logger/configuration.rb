@@ -23,7 +23,14 @@ module OutboundHTTPLogger
                   :secondary_database_url,
                   :secondary_database_adapter,
                   :max_recursion_depth,
-                  :strict_recursion_detection
+                  :strict_recursion_detection,
+                  :observability_enabled,
+                  :structured_logging_enabled,
+                  :structured_logging_format,
+                  :structured_logging_level,
+                  :metrics_collection_enabled,
+                  :debug_tools_enabled,
+                  :performance_logging_threshold
 
     def initialize
       @mutex                  = Mutex.new
@@ -72,6 +79,15 @@ module OutboundHTTPLogger
       # Recursion detection configuration
       @max_recursion_depth = DEFAULT_MAX_RECURSION_DEPTH
       @strict_recursion_detection = false # Whether to raise errors on recursion detection
+
+      # Observability configuration
+      @observability_enabled = false
+      @structured_logging_enabled = false
+      @structured_logging_format = :json # :json or :key_value
+      @structured_logging_level = :info # :debug, :info, :warn, :error, :fatal
+      @metrics_collection_enabled = false
+      @debug_tools_enabled = false
+      @performance_logging_threshold = 1.0 # Log operations slower than 1 second
     end
 
     # Check if logging is enabled
@@ -170,6 +186,32 @@ module OutboundHTTPLogger
       end
 
     public
+
+    # Observability configuration methods
+
+    # Check if observability features are enabled
+    # @return [Boolean] true if observability is enabled
+    def observability_enabled?
+      @observability_enabled == true
+    end
+
+    # Check if structured logging is enabled
+    # @return [Boolean] true if structured logging is enabled
+    def structured_logging_enabled?
+      @structured_logging_enabled == true
+    end
+
+    # Check if metrics collection is enabled
+    # @return [Boolean] true if metrics collection is enabled
+    def metrics_collection_enabled?
+      @metrics_collection_enabled == true
+    end
+
+    # Check if debug tools are enabled
+    # @return [Boolean] true if debug tools are enabled
+    def debug_tools_enabled?
+      @debug_tools_enabled == true
+    end
 
     # Recursion detection and prevention
     def check_recursion_depth!(library_name)
@@ -305,7 +347,14 @@ module OutboundHTTPLogger
           secondary_database_url: @secondary_database_url,
           secondary_database_adapter: @secondary_database_adapter,
           max_recursion_depth: @max_recursion_depth,
-          strict_recursion_detection: @strict_recursion_detection
+          strict_recursion_detection: @strict_recursion_detection,
+          observability_enabled: @observability_enabled,
+          structured_logging_enabled: @structured_logging_enabled,
+          structured_logging_format: @structured_logging_format,
+          structured_logging_level: @structured_logging_level,
+          metrics_collection_enabled: @metrics_collection_enabled,
+          debug_tools_enabled: @debug_tools_enabled,
+          performance_logging_threshold: @performance_logging_threshold
         }
       end
     end
@@ -325,6 +374,13 @@ module OutboundHTTPLogger
         @secondary_database_adapter = backup[:secondary_database_adapter]
         @max_recursion_depth = backup[:max_recursion_depth] if backup.key?(:max_recursion_depth)
         @strict_recursion_detection = backup[:strict_recursion_detection] if backup.key?(:strict_recursion_detection)
+        @observability_enabled = backup[:observability_enabled] if backup.key?(:observability_enabled)
+        @structured_logging_enabled = backup[:structured_logging_enabled] if backup.key?(:structured_logging_enabled)
+        @structured_logging_format = backup[:structured_logging_format] if backup.key?(:structured_logging_format)
+        @structured_logging_level = backup[:structured_logging_level] if backup.key?(:structured_logging_level)
+        @metrics_collection_enabled = backup[:metrics_collection_enabled] if backup.key?(:metrics_collection_enabled)
+        @debug_tools_enabled = backup[:debug_tools_enabled] if backup.key?(:debug_tools_enabled)
+        @performance_logging_threshold = backup[:performance_logging_threshold] if backup.key?(:performance_logging_threshold)
       end
     end
   end

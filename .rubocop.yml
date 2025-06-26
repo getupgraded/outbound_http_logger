@@ -46,6 +46,9 @@ Style/Documentation:
 Style/MultilineBlockChain:
   Enabled: false
 
+Rails/SkipsModelValidations:
+  Enabled: false
+
 Metrics/BlockLength:
   Exclude:
     - 'test/**/*'

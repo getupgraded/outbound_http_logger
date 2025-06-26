@@ -35,6 +35,9 @@ module OutboundHTTPLogger
           duration_seconds
         )
 
+        # Record observability data
+        record_observability_data(method, url, response_data[:status_code], duration_seconds)
+
         response
       rescue StandardError => e
         # Calculate duration even for failed requests
@@ -42,13 +45,17 @@ module OutboundHTTPLogger
         duration_seconds = end_time - start_time
 
         # Log the failed request
+        error_response_data = { status_code: 0, headers: {}, body: "Error: #{e.class}: #{e.message}" }
         Models::OutboundRequestLog.log_request(
           method,
           url,
           request_data,
-          { status_code: 0, headers: {}, body: "Error: #{e.class}: #{e.message}" },
+          error_response_data,
           duration_seconds
         )
+
+        # Record observability data for failed request
+        record_observability_data(method, url, 0, duration_seconds, e)
 
         # Re-raise the error
         raise e
@@ -67,6 +74,9 @@ module OutboundHTTPLogger
         response_data,
         duration_seconds
       )
+
+      # Record observability data
+      record_observability_data(method, url, response_data[:status_code], duration_seconds)
     end
 
     private
@@ -104,6 +114,31 @@ module OutboundHTTPLogger
             headers: response.try(:headers) || {},
             body: response.try(:body)
           }
+        end
+      end
+
+      # Record observability data if observability is enabled
+      # @param method [String] HTTP method
+      # @param url [String] Request URL
+      # @param status_code [Integer] Response status code
+      # @param duration [Float] Request duration in seconds
+      # @param error [Exception, nil] Error if request failed
+      # @return [void]
+      def record_observability_data(method, url, status_code, duration, error = nil)
+        return unless @configuration.observability_enabled?
+
+        begin
+          OutboundHTTPLogger.observability.record_http_request(
+            method,
+            url,
+            status_code,
+            duration,
+            error
+          )
+        rescue StandardError => e
+          # Don't let observability errors break the main request flow
+          # Log the error if debug logging is enabled
+          @configuration.logger.error("Observability error: #{e.message}") if @configuration.debug_logging && @configuration.logger
         end
       end
   end

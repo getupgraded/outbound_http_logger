@@ -76,12 +76,27 @@ module OutboundHTTPLogger
         return nil unless enabled?
         return nil unless OutboundHTTPLogger.configuration.should_log_url?(url)
 
-        OutboundHTTPLogger::ErrorHandling.handle_database_error("log request in #{adapter_name}") do
-          ensure_connection_and_table
+        start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        result = nil
+        error = nil
 
-          # Use the model class directly - it will use the correct connection
-          model_class.log_request(method, url, request_data, response_data, duration_seconds, options)
+        begin
+          result = OutboundHTTPLogger::ErrorHandling.handle_database_error("log request in #{adapter_name}") do
+            ensure_connection_and_table
+
+            # Use the model class directly - it will use the correct connection
+            model_class.log_request(method, url, request_data, response_data, duration_seconds, options)
+          end
+        rescue StandardError => e
+          error = e
+          raise
+        ensure
+          # Record database operation metrics
+          db_duration = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+          record_database_observability('log_request', db_duration, error)
         end
+
+        result
       end
 
       # Check if this adapter is enabled
@@ -131,6 +146,28 @@ module OutboundHTTPLogger
       end
 
       private
+
+        # Record database operation observability data
+        # @param operation [String] Database operation name
+        # @param duration [Float] Operation duration in seconds
+        # @param error [Exception, nil] Error if operation failed
+        # @return [void]
+        def record_database_observability(operation, duration, error = nil)
+          return unless OutboundHTTPLogger.configuration.observability_enabled?
+
+          begin
+            OutboundHTTPLogger.observability.record_database_operation(
+              "#{adapter_name}.#{operation}",
+              duration,
+              error
+            )
+          rescue StandardError => e
+            # Don't let observability errors break the database operation
+            # Log the error if debug logging is enabled
+            config = OutboundHTTPLogger.configuration
+            config.logger.error("Database observability error: #{e.message}") if config.debug_logging && config.logger
+          end
+        end
 
         # Ensure connection and table exist
         def ensure_connection_and_table
