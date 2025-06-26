@@ -236,6 +236,16 @@ module OutboundHTTPLogger
       Patches::HTTPartyPatch.reset!
     end
 
+    # Get information about available HTTP libraries
+    # @return [Hash] Hash with library names as keys and availability status as values
+    def library_status
+      {
+        'Net::HTTP' => library_info_safe('Net::HTTP', 'net/http'),
+        'Faraday' => library_info_safe('Faraday', 'faraday'),
+        'HTTParty' => library_info_safe('HTTParty', 'httparty')
+      }
+    end
+
     # Complete reset for testing (patches, configuration, thread data)
     def reset_for_testing!
       reset_patches!
@@ -261,9 +271,135 @@ module OutboundHTTPLogger
       def setup_patches
         return unless configuration.enabled?
 
-        Patches::NetHTTPPatch.apply! if defined?(Net::HTTP)
-        Patches::FaradayPatch.apply! if defined?(Faraday)
-        Patches::HTTPartyPatch.apply! if defined?(HTTParty)
+        apply_patch_with_fallback('Net::HTTP', -> { Patches::NetHTTPPatch.apply! }, -> { defined?(Net::HTTP) })
+        apply_patch_with_fallback('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
+        apply_patch_with_fallback('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
+      end
+
+      # Apply a patch with graceful error handling and logging
+      def apply_patch_with_fallback(library_name, patch_proc, availability_check)
+        return unless availability_check.call
+
+        patch_proc.call
+        log_library_status(library_name, :patched)
+      rescue StandardError => e
+        log_library_status(library_name, :error, e)
+        # Don't re-raise - continue with other patches
+      end
+
+      # Log the status of HTTP library availability and patching
+      def log_library_status(library_name, status, error = nil)
+        return unless configuration.debug_logging
+
+        logger = configuration.get_logger
+        return unless logger
+
+        case status
+        when :patched
+          logger.debug("OutboundHTTPLogger: #{library_name} patch applied successfully")
+        when :error
+          logger.warn("OutboundHTTPLogger: Failed to patch #{library_name}: #{error.message}")
+        end
+      end
+
+      # Get detailed information about a specific HTTP library (safe version using strings)
+      def library_info_safe(library_name, gem_name)
+        library_constant = begin
+          Object.const_get(library_name)
+        rescue NameError
+          nil
+        end
+
+        if library_constant
+          version = begin
+            library_constant.const_get(:VERSION) if library_constant.const_defined?(:VERSION)
+          rescue StandardError
+            'unknown'
+          end
+
+          {
+            available: true,
+            version: version,
+            patched: patch_applied_for_library_name?(library_name)
+          }
+        else
+          {
+            available: false,
+            version: nil,
+            patched: false,
+            suggestion: "Add 'gem \"#{gem_name}\"' to your Gemfile to enable #{library_name} logging"
+          }
+        end
+      rescue StandardError => e
+        {
+          available: false,
+          version: nil,
+          patched: false,
+          error: e.message
+        }
+      end
+
+      # Get detailed information about a specific HTTP library
+      def library_info(library_constant, gem_name)
+        if defined?(library_constant)
+          version = begin
+            library_constant.const_get(:VERSION) if library_constant.const_defined?(:VERSION)
+          rescue StandardError
+            'unknown'
+          end
+
+          {
+            available: true,
+            version: version,
+            patched: patch_applied_for_library?(library_constant)
+          }
+        else
+          {
+            available: false,
+            version: nil,
+            patched: false,
+            suggestion: "Add 'gem \"#{gem_name}\"' to your Gemfile to enable #{library_constant} logging"
+          }
+        end
+      rescue StandardError => e
+        {
+          available: false,
+          version: nil,
+          patched: false,
+          error: e.message
+        }
+      end
+
+      # Check if patch has been applied for a specific library by name
+      def patch_applied_for_library_name?(library_name)
+        case library_name
+        when 'Net::HTTP'
+          Patches::NetHTTPPatch.applied?
+        when 'Faraday'
+          Patches::FaradayPatch.applied?
+        when 'HTTParty'
+          Patches::HTTPartyPatch.applied?
+        else
+          false
+        end
+      rescue StandardError
+        false
+      end
+
+      # Check if patch has been applied for a specific library
+      def patch_applied_for_library?(library_constant)
+        case library_constant.name
+        when 'Net::HTTP'
+          Patches::NetHTTPPatch.applied?
+        when 'Faraday'
+          Patches::FaradayPatch.applied?
+        when 'HTTParty'
+          Patches::HTTPartyPatch.applied?
+        else
+          false
+        end
+      rescue StandardError
+        false
       end
 
       # Apply patches immediately when libraries are available

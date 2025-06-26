@@ -14,11 +14,32 @@ module OutboundHTTPLogger
         # @param library_name [String] Human-readable name for logging
         def apply_patch_safely!(library_constant, target_class, patch_module, library_name)
           return if applied?
-          return unless defined?(library_constant)
+
+          # Check if library is defined and accessible
+          unless library_available?(library_constant)
+            log_library_unavailable(library_name)
+            return
+          end
+
+          # Verify target class is accessible
+          unless target_class.respond_to?(:prepend)
+            log_patch_error(library_name, "Target class #{target_class} does not support prepend")
+            return
+          end
 
           target_class.prepend(patch_module)
           mark_as_applied!
           log_patch_application(library_name)
+        rescue StandardError => e
+          log_patch_error(library_name, e.message)
+          # Don't re-raise to allow other patches to be applied
+        end
+
+        # Check if a library is available and accessible
+        def library_available?(library_constant)
+          defined?(library_constant) && library_constant.is_a?(Class)
+        rescue StandardError
+          false
         end
 
         # Check if patch has been applied
@@ -42,7 +63,24 @@ module OutboundHTTPLogger
             config = OutboundHTTPLogger.configuration
             return unless config.debug_logging
 
-            config.get_logger&.debug("OutboundHTTPLogger: #{library_name} patch applied")
+            config.get_logger&.debug("OutboundHTTPLogger: #{library_name} patch applied successfully")
+          end
+
+          def log_library_unavailable(library_name)
+            config = OutboundHTTPLogger.configuration
+            return unless config.debug_logging
+
+            config.get_logger&.debug("OutboundHTTPLogger: #{library_name} not available, skipping patch")
+          end
+
+          def log_patch_error(library_name, error_message)
+            config = OutboundHTTPLogger.configuration
+            logger = config.get_logger
+            return unless logger
+
+            return unless config.debug_logging
+
+            logger.warn("OutboundHTTPLogger: Failed to patch #{library_name}: #{error_message}")
           end
       end
 
