@@ -99,6 +99,37 @@ module OutboundHTTPLogger
         self.class.name.split('::').last
       end
 
+      # Standardized connection validation
+      def validate_connection
+        return false unless enabled?
+
+        OutboundHTTPLogger::ErrorHandling.handle_database_error("validate connection for #{adapter_name}", default_return: false) do
+          ensure_connection_and_table
+          model_class.connection.active?
+        end
+      end
+
+      # Standardized error logging for adapter-specific operations
+      def log_adapter_error(operation, error)
+        logger = OutboundHTTPLogger.configuration.get_logger
+        return unless logger
+
+        logger.error("OutboundHTTPLogger #{adapter_name}: Failed to #{operation}: #{error.class}: #{error.message}")
+      end
+
+      # Database capability detection (override in subclasses to reflect actual capabilities)
+      def supports_native_json?
+        false # Conservative default - override in subclasses
+      end
+
+      def supports_json_queries?
+        false # Conservative default - override in subclasses
+      end
+
+      def supports_full_text_search?
+        false # Conservative default - override in subclasses
+      end
+
       private
 
         # Ensure connection and table exist

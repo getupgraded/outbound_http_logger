@@ -11,9 +11,22 @@ module OutboundHTTPLogger
           require 'pg'
           true
         rescue LoadError
-          OutboundHTTPLogger.configuration.get_logger&.warn('pg gem not available. PostgreSQL logging disabled.') if @database_url.present?
+          log_adapter_error('load pg gem', StandardError.new('pg gem not available')) if @database_url.present?
           false
         end
+      end
+
+      # PostgreSQL capabilities
+      def supports_native_json?
+        true # PostgreSQL has native JSONB support
+      end
+
+      def supports_json_queries?
+        true # PostgreSQL supports advanced JSONB queries
+      end
+
+      def supports_full_text_search?
+        true # PostgreSQL has built-in full-text search
       end
 
       # Establish connection to PostgreSQL database
@@ -129,8 +142,7 @@ module OutboundHTTPLogger
                 create!(log_data)
               rescue StandardError => e
                 # Failsafe: Never let logging errors break the HTTP request
-                logger = OutboundHTTPLogger.configuration.get_logger
-                logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
+                log_adapter_error('log request', e)
                 nil
               end
 

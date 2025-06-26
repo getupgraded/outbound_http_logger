@@ -12,9 +12,24 @@ module OutboundHTTPLogger
           require 'sqlite3'
           true
         rescue LoadError
-          OutboundHTTPLogger.configuration.get_logger&.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
+          log_adapter_error('load sqlite3 gem', StandardError.new('SQLite3 gem not available')) if @database_url.present?
           false
         end
+      end
+
+      # SQLite capabilities
+      def supports_native_json?
+        false # SQLite stores JSON as text, not native JSON type
+      end
+
+      def supports_json_queries?
+        # SQLite 3.38+ has JSON functions, but we use LIKE queries for compatibility
+        false
+      end
+
+      def supports_full_text_search?
+        # SQLite has FTS extensions, but we use basic LIKE queries for simplicity
+        false
       end
 
       # Establish connection to SQLite database
@@ -146,8 +161,7 @@ module OutboundHTTPLogger
                 create!(log_data)
               rescue StandardError => e
                 # Failsafe: Never let logging errors break the HTTP request
-                logger = OutboundHTTPLogger.configuration.get_logger
-                logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
+                log_adapter_error('log request', e)
                 nil
               end
 
