@@ -10,8 +10,10 @@ rescue LoadError
   # dotenv not available, continue without it
 end
 
+require 'etc'
 require 'minitest/autorun'
 require 'minitest/spec'
+require 'minitest/parallel/db'
 require 'mocha/minitest'
 require 'logger'
 require 'stringio'
@@ -38,9 +40,17 @@ def setup_test_database
 
   case database_adapter
   when 'sqlite3'
+    # Configure connection pool for thread-based parallel testing
+    # Each thread needs its own connection to avoid pool exhaustion
+    # Scale pool size with number of workers, with a reasonable minimum
+    worker_count = ENV.fetch('PARALLEL_WORKERS', [1, Etc.nprocessors - 1].max).to_i
+    pool_size = [worker_count * 3, 15].max # At least 3 connections per worker, minimum 15
+
     ActiveRecord::Base.establish_connection(
       adapter: 'sqlite3',
-      database: database_url || ':memory:'
+      database: database_url || ':memory:',
+      pool: pool_size,
+      timeout: 15
     )
   when 'postgresql'
     ActiveRecord::Base.establish_connection(database_url || { adapter: 'postgresql',
@@ -59,39 +69,67 @@ setup_test_database
 # Load test utilities
 require 'outbound_http_logger/test'
 
-# Create the outbound_request_logs table
-ActiveRecord::Schema.define do
-  create_table :outbound_request_logs do |t|
-    t.string :http_method, null: false
-    t.text :url, null: false
-    t.integer :status_code, null: false
-    t.json :request_headers
-    t.json :response_headers
-    t.json :request_body
-    t.json :response_body
-    t.json :metadata
-    t.decimal :duration_seconds, precision: 10, scale: 6
-    t.decimal :duration_ms, precision: 10, scale: 2
-    t.references :loggable, polymorphic: true, null: true
-    # Only created_at needed for append-only logging
-    t.timestamp :created_at, null: false, default: -> { 'CURRENT_TIMESTAMP' }
-  end
+# Create the outbound_request_logs table for testing
+# This function is called both at startup and in the parallelize_setup hook
+# to ensure the table exists in each worker's database
+def ensure_test_table_exists
+  return if ActiveRecord::Base.connection.table_exists?(:outbound_request_logs)
 
-  # Essential indexes for append-only logging (minimal set)
-  add_index :outbound_request_logs, :created_at
-  add_index :outbound_request_logs, %i[loggable_type loggable_id]
+  ActiveRecord::Schema.define do
+    create_table :outbound_request_logs do |t|
+      t.string :http_method, null: false
+      t.text :url, null: false
+      t.integer :status_code, null: false
+      t.json :request_headers
+      t.json :response_headers
+      t.json :request_body
+      t.json :response_body
+      t.json :metadata
+      t.decimal :duration_seconds, precision: 10, scale: 6
+      t.decimal :duration_ms, precision: 10, scale: 2
+      t.references :loggable, polymorphic: true, null: true
+      # Only created_at needed for append-only logging
+      t.timestamp :created_at, null: false, default: -> { 'CURRENT_TIMESTAMP' }
+    end
+
+    # Essential indexes for append-only logging (minimal set)
+    add_index :outbound_request_logs, :created_at
+    add_index :outbound_request_logs, %i[loggable_type loggable_id]
+  end
 end
 
-# JSON columns are automatically handled in Rails 8.0+
+# Ensure table exists initially (for non-parallel testing)
+ensure_test_table_exists
+
+# Enable parallelization with database isolation using minitest-parallel-db
+# This provides proper database isolation for parallel tests using transactions
 
 # Test helper methods
 module TestHelpers
+  def self.included(base)
+    # Add after hook for Minitest::Spec classes
+    return unless base.respond_to?(:after)
+
+    base.after do
+      perform_isolation_checks_and_cleanup
+    end
+  end
+
   def setup
-    # Reset configuration to defaults
+    # Ensure table exists in this worker's database (important for parallel testing)
+    ensure_test_table_exists
+
+    # Reset configuration to defaults FIRST
     OutboundHTTPLogger.reset_configuration!
+
+    # Clear all thread-local data BEFORE any operations to prevent interference
+    OutboundHTTPLogger.clear_all_thread_data
 
     # Reset patch application state
     OutboundHTTPLogger.reset_patches!
+
+    # Reset database adapter cache to prevent memoization issues
+    OutboundHTTPLogger::Models::OutboundRequestLog.reset_adapter_cache!
 
     # Clear all logs
     OutboundHTTPLogger::Models::OutboundRequestLog.delete_all
@@ -102,18 +140,21 @@ module TestHelpers
   end
 
   def teardown
-    # Optional: Check for leftover thread-local data and configuration changes
+    perform_isolation_checks_and_cleanup
+  end
+
+  # NOTE: Removed problematic aliases and duplicate self.included method
+  # that were causing infinite recursion in setup
+
+  def perform_isolation_checks_and_cleanup
+    # Check for leftover thread-local data and configuration changes
     # This helps identify tests that don't clean up properly
     # Enable with: STRICT_TEST_ISOLATION=true
     if ENV['STRICT_TEST_ISOLATION'] == 'true'
-      begin
-        assert_no_leftover_thread_data!
-        # Check configuration BEFORE we clean it up
-        assert_configuration_unchanged!
-      rescue StandardError => e
-        # Log the error but don't fail the test - just warn
-        puts "\n⚠️  #{e.message}"
-      end
+      # Check for isolation violations BEFORE cleanup
+      # These will raise errors if violations are found
+      assert_no_leftover_thread_data!
+      assert_configuration_unchanged!
     end
 
     # Disable logging (this modifies configuration, so check must be above)
@@ -126,25 +167,8 @@ module TestHelpers
   # Check for leftover thread-local data and raise descriptive errors
   # This helps identify tests that don't clean up properly
   def assert_no_leftover_thread_data!
-    leftover_data = {}
-
-    # Check all known OutboundHTTPLogger thread-local variables
-    thread_vars = {
-      outbound_http_logger_config_override: Thread.current[:outbound_http_logger_config_override],
-      outbound_http_logger_loggable: Thread.current[:outbound_http_logger_loggable],
-      outbound_http_logger_metadata: Thread.current[:outbound_http_logger_metadata],
-      outbound_http_logger_in_faraday: Thread.current[:outbound_http_logger_in_faraday],
-      outbound_http_logger_logging_error: Thread.current[:outbound_http_logger_logging_error],
-      outbound_http_logger_depth_faraday: Thread.current[:outbound_http_logger_depth_faraday],
-      outbound_http_logger_depth_net_http: Thread.current[:outbound_http_logger_depth_net_http],
-      outbound_http_logger_depth_httparty: Thread.current[:outbound_http_logger_depth_httparty],
-      outbound_http_logger_depth_test: Thread.current[:outbound_http_logger_depth_test],
-      outbound_http_logger_in_request: Thread.current[:outbound_http_logger_in_request]
-    }
-
-    thread_vars.each do |key, value|
-      leftover_data[key] = value unless value.nil?
-    end
+    # Use ThreadContext to get all current thread data
+    leftover_data = OutboundHTTPLogger::ThreadContext.backup_current.compact
 
     return if leftover_data.empty?
 
@@ -212,15 +236,9 @@ module TestHelpers
     ERROR
   end
 
-  def with_logging_enabled
-    OutboundHTTPLogger.configure do |config|
-      config.enabled = true
-      # Set a test logger to avoid Rails.logger dependency
-      config.logger = Logger.new(StringIO.new) unless config.logger
-    end
-    yield
-  ensure
-    OutboundHTTPLogger.disable!
+  def with_outbound_http_logging_enabled(&)
+    # Use complete isolation to ensure no configuration or data leakage
+    OutboundHTTPLogger.with_isolated_context(enabled: true, logger: Logger.new(StringIO.new), &)
   end
 
   def assert_request_logged(method, url, status_code = nil)
@@ -308,7 +326,7 @@ module TestHelpers
       log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
     end
 
-    assert_not logs.empty?, "Expected outbound request to be logged: #{method.upcase} #{url}"
+    refute_empty logs, "Expected outbound request to be logged: #{method.upcase} #{url}"
     logs.first
   end
 
@@ -357,3 +375,25 @@ end
 # Include test helpers in all test classes
 Minitest::Test.include(TestHelpers)
 Minitest::Spec.include(TestHelpers)
+
+# Enable Rails-style parallel testing with proper database isolation
+# Rails automatically creates separate databases for each worker (test-database-0, test-database-1, etc.)
+# and handles the complexity of parallel test execution
+
+# Configure thread-based parallel testing
+# Using threads instead of processes to avoid DRb serialization issues
+# Threads share memory space, so no marshaling of objects is required
+#
+# Performance notes:
+# - Default: 4 threads (optimal for SQLite with in-memory database)
+# - Override with PARALLEL_WORKERS environment variable
+# - Connection pool scales automatically (3 connections per worker, minimum 15)
+# - Thread-based approach avoids DRb serialization issues with Proc objects
+module ActiveSupport
+  class TestCase
+    # Use thread-based parallelization to avoid DRb serialization issues
+    # Default to 4 workers for optimal performance with SQLite, but allow override
+    worker_count = ENV.fetch('PARALLEL_WORKERS', [1, Etc.nprocessors - 2].max).to_i
+    parallelize(workers: worker_count, with: :threads)
+  end
+end

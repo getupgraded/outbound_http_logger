@@ -172,7 +172,7 @@ Tests that enable logging without setting a proper logger cause `Rails.logger` d
 
 ```ruby
 # Problem: Enables logging but no logger set
-def with_logging_enabled
+def with_outbound_http_logging_enabled
   OutboundHTTPLogger.enable!  # Falls back to Rails.logger
   yield
 ensure
@@ -186,7 +186,7 @@ Always set a test logger to avoid Rails dependencies:
 
 ```ruby
 # Solution: Set explicit test logger
-def with_logging_enabled
+def with_outbound_http_logging_enabled
   OutboundHTTPLogger.configure do |config|
     config.enabled = true
     config.logger = Logger.new(StringIO.new) unless config.logger

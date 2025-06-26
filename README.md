@@ -600,6 +600,16 @@ bundle install
 bundle exec rake test
 ```
 
+
+### Git Hooks
+
+Use the provided `pre-commit` hook to run RuboCop before each commit:
+
+```bash
+# we use RVM inhouse, so we assume that. Adjust as you see fit (or skip hooks, the same checks happen in CI anyway)
+git config core.hooksPath githooks
+```
+
 #### Testing Against Multiple Databases
 
 The gem supports testing against both SQLite and PostgreSQL databases. By default, tests run against an in-memory SQLite database.

@@ -55,7 +55,7 @@ class TestDatabaseAdapters < Minitest::Test
       0.5
     )
 
-    assert_not_nil log_entry
+    refute_nil log_entry
     assert_equal 'GET', log_entry.http_method
     assert_equal 'https://api.example.com/users', log_entry.url
     assert_equal 200, log_entry.status_code
@@ -67,6 +67,10 @@ class TestDatabaseAdapters < Minitest::Test
 
   def test_sqlite_adapter_json_queries
     skip 'SQLite3 gem not available' unless sqlite_available?
+    skip 'Test requires SQLite database' unless ActiveRecord::Base.connection.adapter_name.downcase.include?('sqlite')
+
+    # Enable global OutboundHTTPLogger for the adapter to work
+    OutboundHTTPLogger.enable!
 
     OutboundHTTPLogger::Test.configure(adapter: :sqlite)
     OutboundHTTPLogger::Test.enable!
@@ -82,7 +86,7 @@ class TestDatabaseAdapters < Minitest::Test
       0.3
     )
 
-    assert_not_nil log_entry
+    refute_nil log_entry
     model_class = adapter.model_class
 
     # Debug: Check what was actually stored
@@ -133,7 +137,7 @@ class TestDatabaseAdapters < Minitest::Test
       0.8
     )
 
-    assert_not_nil log_entry
+    refute_nil log_entry
     assert_equal 'POST', log_entry.http_method
     assert_equal 'https://api.example.com/webhook', log_entry.url
     assert_equal 202, log_entry.status_code
@@ -175,7 +179,7 @@ class TestDatabaseAdapters < Minitest::Test
         0.1
       )
       # The log should be created successfully
-      assert_not_nil log_entry
+      refute_nil log_entry
     rescue StandardError => e
       flunk "Expected no exception, but got: #{e.class}: #{e.message}"
     end
@@ -201,7 +205,7 @@ class TestDatabaseAdapters < Minitest::Test
 
     OutboundHTTPLogger::Test.disable!
 
-    assert_not OutboundHTTPLogger::Test.enabled?
+    refute_predicate OutboundHTTPLogger::Test, :enabled?
   end
 
   def test_test_utilities_log_counting
@@ -221,7 +225,7 @@ class TestDatabaseAdapters < Minitest::Test
       0.1
     )
 
-    assert_not_nil log_entry
+    refute_nil log_entry
     assert_equal 1, OutboundHTTPLogger::Test.logs_count
 
     analysis = OutboundHTTPLogger::Test.analyze
@@ -233,6 +237,7 @@ class TestDatabaseAdapters < Minitest::Test
 
   def test_postgresql_adapter_json_conversion
     skip 'PostgreSQL not available' unless postgresql_test_database_available?
+    skip 'Test requires PostgreSQL database' unless ActiveRecord::Base.connection.adapter_name.downcase.include?('postgresql')
 
     database_url = ENV['OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
                    'postgresql://postgres:@localhost:5432/outbound_http_logger_test'
@@ -281,7 +286,7 @@ class TestDatabaseAdapters < Minitest::Test
 
     # Modify configuration
     OutboundHTTPLogger::Test.with_configuration(enabled: false) do
-      assert_not OutboundHTTPLogger.enabled?
+      refute_predicate OutboundHTTPLogger, :enabled?
     end
 
     # Configuration should be restored after block

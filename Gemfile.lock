@@ -68,6 +68,8 @@ GEM
     logger (1.7.0)
     mini_mime (1.1.5)
     minitest (5.25.5)
+    minitest-parallel-db (0.0.4)
+      minitest (>= 4.2)
     mocha (2.7.1)
       ruby2_keywords (>= 0.0.5)
     multi_xml (0.7.2)
@@ -167,6 +169,7 @@ DEPENDENCIES
   httparty (~> 0.20)
   irb
   minitest (~> 5.0)
+  minitest-parallel-db (~> 0.0.4)
   mocha (~> 2.0)
   outbound_http_logger!
   pg (~> 1.5)

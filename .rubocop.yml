@@ -35,10 +35,17 @@ AllCops:
 Rails/ApplicationRecord:
   Enabled: false
 
+Rails/RefuteMethods:
+  Enabled: true
+  EnforcedStyle: refute
+
 Style/Documentation:
   Enabled: false
   Exclude:
     - 'test/**/*'
+
+Style/MultilineBlockChain:
+  Enabled: false
 
 Metrics/BlockLength:
   Exclude:

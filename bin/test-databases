@@ -123,9 +123,12 @@ for database in "${databases[@]}"; do
             test_count=$((test_count + 1))
             print_status "${BLUE}Running $test_file with $database...${NC}"
 
-            # Clean up PostgreSQL table before each test file
+            # Clean up database tables before each test file
             if [[ "$database" == "postgresql" ]]; then
                 psql "$DATABASE_URL" -c "DROP TABLE IF EXISTS outbound_request_logs;" &> /dev/null
+            else
+                # For SQLite3, remove any existing database files to ensure clean state
+                rm -f test.db test.sqlite3 outbound_http_logger_test.db outbound_http_logger_test.sqlite3 &> /dev/null
             fi
 
             # Run the test with timeout to prevent hanging

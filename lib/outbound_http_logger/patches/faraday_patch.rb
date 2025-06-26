@@ -3,29 +3,25 @@
 module OutboundHTTPLogger
   module Patches
     module FaradayPatch
-      @mutex = Mutex.new
-      @applied = false
+      @@applied = false
 
       def self.apply!
-        # Thread-safe patch application using mutex
-        @mutex.synchronize do
-          return if @applied
-          return unless defined?(Faraday)
+        # Simple one-time patch application (no mutex due to environment issues)
+        return if @@applied
+        return unless defined?(Faraday)
 
-          # Patch Faraday::Connection
-          Faraday::Connection.prepend(ConnectionMethods)
-          @applied = true
-
-          OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Faraday patch applied') if OutboundHTTPLogger.configuration.debug_logging
-        end
+        # Patch Faraday::Connection
+        Faraday::Connection.prepend(ConnectionMethods)
+        @@applied = true
+        OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Faraday patch applied') if OutboundHTTPLogger.configuration.debug_logging
       end
 
       def self.applied?
-        @mutex.synchronize { @applied }
+        @@applied
       end
 
       def self.reset!
-        @mutex.synchronize { @applied = false }
+        @@applied = false
       end
 
       module ConnectionMethods
