@@ -5,7 +5,7 @@
 ### Code Quality Improvements
 - ✅ Extract common patch behavior into shared module to eliminate duplication across Net::HTTP, Faraday, and HTTParty patches
 - ✅ Replace magic numbers with named constants for better maintainability (max_body_size, max_recursion_depth, connection pool settings)
-- Refactor URL filtering logic into focused, separate methods
+- ✅ Refactor URL filtering logic into focused, separate methods (should_log_url? now uses logging_enabled_for_url?, valid_url?, url_excluded?)
 - Standardize error handling patterns across the codebase
 
 ### Documentation Enhancements

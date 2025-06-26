@@ -79,10 +79,25 @@ module OutboundHTTPLogger
     end
 
     def should_log_url?(url)
-      return false unless enabled?
-      return false if url.blank?
+      return false unless logging_enabled_for_url?
+      return false unless valid_url?(url)
 
-      @excluded_urls.none? { |pattern| pattern.match?(url) }
+      !url_excluded?(url)
+    end
+
+    # Check if logging is enabled for URL filtering
+    def logging_enabled_for_url?
+      enabled?
+    end
+
+    # Validate that URL is present and not blank
+    def valid_url?(url)
+      url.present?
+    end
+
+    # Check if URL matches any exclusion patterns
+    def url_excluded?(url)
+      @excluded_urls.any? { |pattern| pattern.match?(url) }
     end
 
     def should_log_content_type?(content_type)
