@@ -1,4 +1,4 @@
-# Thread-Local Data Isolation in OutboundHttpLogger
+# Thread-Local Data Isolation in OutboundHTTPLogger
 
 ## Problem
 
@@ -14,10 +14,10 @@ We've implemented a better approach that **detects** leftover thread-local data 
 
 ### 1. Comprehensive Thread-Local Data Management
 
-**New method: `OutboundHttpLogger.clear_all_thread_data`**
+**New method: `OutboundHTTPLogger.clear_all_thread_data`**
 ```ruby
 # Clears ALL thread-local data including internal state variables
-OutboundHttpLogger.clear_all_thread_data
+OutboundHTTPLogger.clear_all_thread_data
 ```
 
 This replaces the previous incomplete cleanup and ensures all thread-local variables are cleared:
@@ -41,7 +41,7 @@ assert_no_leftover_thread_data!
 ```
 
 This method:
-- Checks all known OutboundHttpLogger thread-local variables
+- Checks all known OutboundHTTPLogger thread-local variables
 - Raises a descriptive error if any leftover data is found
 - Helps identify which tests are not cleaning up properly
 
@@ -70,8 +70,8 @@ def teardown
   end
 
   # Clean up
-  OutboundHttpLogger.disable!
-  OutboundHttpLogger.clear_all_thread_data
+  OutboundHTTPLogger.disable!
+  OutboundHTTPLogger.clear_all_thread_data
 end
 ```
 
@@ -79,12 +79,12 @@ end
 ```ruby
 def test_proper_cleanup
   # Do something that sets thread-local data
-  OutboundHttpLogger.set_metadata(test: "data")
+  OutboundHTTPLogger.set_metadata(test: "data")
   
   # Your test logic here...
   
   # Ensure proper cleanup
-  OutboundHttpLogger.clear_thread_data
+  OutboundHTTPLogger.clear_thread_data
   assert_no_leftover_thread_data!
 end
 ```
@@ -93,7 +93,7 @@ end
 ```ruby
 def test_debugging_isolation
   # Set some data
-  OutboundHttpLogger.set_metadata(debug: "info")
+  OutboundHTTPLogger.set_metadata(debug: "info")
   
   # Intentionally forget to clean up to see the error
   assert_raises(RuntimeError) do
@@ -127,7 +127,7 @@ end
 ```ruby
 def setup
   # Use comprehensive cleanup method
-  OutboundHttpLogger.clear_all_thread_data
+  OutboundHTTPLogger.clear_all_thread_data
 end
 
 def teardown
@@ -135,7 +135,7 @@ def teardown
   assert_no_leftover_thread_data! if ENV['STRICT_TEST_ISOLATION']
   
   # Clean up properly
-  OutboundHttpLogger.clear_all_thread_data
+  OutboundHTTPLogger.clear_all_thread_data
 end
 ```
 
@@ -173,10 +173,10 @@ Tests that enable logging without setting a proper logger cause `Rails.logger` d
 ```ruby
 # Problem: Enables logging but no logger set
 def with_logging_enabled
-  OutboundHttpLogger.enable!  # Falls back to Rails.logger
+  OutboundHTTPLogger.enable!  # Falls back to Rails.logger
   yield
 ensure
-  OutboundHttpLogger.disable!
+  OutboundHTTPLogger.disable!
 end
 ```
 
@@ -187,13 +187,13 @@ Always set a test logger to avoid Rails dependencies:
 ```ruby
 # Solution: Set explicit test logger
 def with_logging_enabled
-  OutboundHttpLogger.configure do |config|
+  OutboundHTTPLogger.configure do |config|
     config.enabled = true
     config.logger = Logger.new(StringIO.new) unless config.logger
   end
   yield
 ensure
-  OutboundHttpLogger.disable!
+  OutboundHTTPLogger.disable!
 end
 ```
 

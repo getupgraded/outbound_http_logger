@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Patches
     module NetHTTPPatch
       @mutex = Mutex.new
@@ -15,7 +15,7 @@ module OutboundHttpLogger
           Net::HTTP.prepend(InstanceMethods)
           @applied = true
 
-          OutboundHttpLogger.configuration.get_logger&.debug('OutboundHttpLogger: Net::HTTP patch applied') if OutboundHttpLogger.configuration.debug_logging
+          OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Net::HTTP patch applied') if OutboundHTTPLogger.configuration.debug_logging
         end
       end
 
@@ -30,7 +30,7 @@ module OutboundHttpLogger
       module InstanceMethods
         def request(req, body = nil, &)
           # Get configuration first to check if logging is enabled
-          config = OutboundHttpLogger.configuration
+          config = OutboundHTTPLogger.configuration
 
           # Early exit if logging is disabled
           return super unless config.enabled?
@@ -78,12 +78,12 @@ module OutboundHttpLogger
 
             # Check if content type should be excluded
             content_type = response_data[:headers]['content-type'] || response_data[:headers]['Content-Type']
-            should_log_content_type = OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+            should_log_content_type = OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
             # Log the request only if content type is allowed
             if should_log_content_type
               duration_seconds = end_time - start_time
-              OutboundHttpLogger.logger.log_completed_request(
+              OutboundHTTPLogger.logger.log_completed_request(
                 req.method,
                 url,
                 request_data,
@@ -112,7 +112,7 @@ module OutboundHttpLogger
               body: "Error: #{e.class}: #{e.message}"
             }
 
-            OutboundHttpLogger.logger.log_completed_request(
+            OutboundHTTPLogger.logger.log_completed_request(
               req.method,
               url,
               request_data,

@@ -1,4 +1,4 @@
-# OutboundHttpLogger
+# OutboundHTTPLogger
 
 [![CI](https://github.com/getupgraded/outbound_http_logger/actions/workflows/test.yml/badge.svg)](https://github.com/getupgraded/outbound_http_logger/actions/workflows/outbound-http-logger-ci.yml)
 
@@ -44,7 +44,7 @@ Ruby 3.2, 3.3, and 3.4 on Rails 7.2 and 8.0.2.
 
 ```ruby
 # config/initializers/outbound_http_logger.rb
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   config.enabled = true
 
   # Optional: Add custom URL exclusions
@@ -82,7 +82,7 @@ The gem supports **optional** logging to a secondary database alongside the main
 
 ```ruby
 # config/initializers/outbound_http_logger.rb
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   # Enable logging to your main Rails database (default behavior)
   config.enabled = true
 
@@ -97,7 +97,7 @@ If you want to **also** log to a separate database (in addition to your main Rai
 
 ```ruby
 # config/initializers/outbound_http_logger.rb
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   config.enabled = true # Main Rails database logging
 
   # OPTIONAL: Also log to an additional database
@@ -117,28 +117,28 @@ end
 
 ```ruby
 # Main database logging (always uses your Rails database)
-OutboundHttpLogger.enable!   # Enable main database logging
-OutboundHttpLogger.disable!  # Disable all logging
-OutboundHttpLogger.enabled?  # Check if logging is enabled
+OutboundHTTPLogger.enable!   # Enable main database logging
+OutboundHTTPLogger.disable!  # Disable all logging
+OutboundHTTPLogger.enabled?  # Check if logging is enabled
 
 # Additional database logging (optional, in addition to main database)
-OutboundHttpLogger.enable_secondary_logging!('sqlite3:///log/outbound_requests.sqlite3')
-OutboundHttpLogger.enable_secondary_logging!('postgresql://user:pass@host/logs')
-OutboundHttpLogger.disable_secondary_logging!
-OutboundHttpLogger.secondary_logging_enabled?
+OutboundHTTPLogger.enable_secondary_logging!('sqlite3:///log/outbound_requests.sqlite3')
+OutboundHTTPLogger.enable_secondary_logging!('postgresql://user:pass@host/logs')
+OutboundHTTPLogger.disable_secondary_logging!
+OutboundHTTPLogger.secondary_logging_enabled?
 ```
 
 ### Environment-specific Configuration
 
 ```ruby
 # config/environments/production.rb
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   config.enabled       = true
   config.debug_logging = false
 end
 
 # config/environments/development.rb
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   config.enabled       = true
   config.debug_logging = true
 end
@@ -161,7 +161,7 @@ Associate outbound HTTP requests with your ActiveRecord models:
 
 ```ruby
 class UsersController < ApplicationController
-  include OutboundHttpLogger::Concerns::OutboundLogging
+  include OutboundHTTPLogger::Concerns::OutboundLogging
 
   def sync_user
     user = User.find(params[:id])
@@ -184,22 +184,22 @@ end
 
 ```ruby
 # Set loggable for all outbound requests in current thread
-OutboundHttpLogger.set_loggable(current_user)
-OutboundHttpLogger.set_metadata(action: 'bulk_sync', batch_id: 123)
+OutboundHTTPLogger.set_loggable(current_user)
+OutboundHTTPLogger.set_metadata(action: 'bulk_sync', batch_id: 123)
 
 # All subsequent HTTP requests will be associated with current_user
 HTTParty.get('https://api.example.com/users')
 Faraday.post('https://api.example.com/orders', body: data.to_json)
 
 # Clear thread-local data when done
-OutboundHttpLogger.clear_thread_data
+OutboundHTTPLogger.clear_thread_data
 ```
 
 #### Scoped Association
 
 ```ruby
 # Temporarily associate requests with a specific object
-OutboundHttpLogger.with_logging(loggable: order, metadata: { action: 'fulfillment' }) do
+OutboundHTTPLogger.with_logging(loggable: order, metadata: { action: 'fulfillment' }) do
   # These requests will be associated with the order
   HTTParty.post('https://shipping.example.com/create', body: order.shipping_data)
   HTTParty.post('https://inventory.example.com/reserve', body: order.items)
@@ -211,23 +211,23 @@ end
 
 ```ruby
 # Find all logs
-logs = OutboundHttpLogger::Models::OutboundRequestLog.all
+logs = OutboundHTTPLogger::Models::OutboundRequestLog.all
 
 # Find by status code
-error_logs   = OutboundHttpLogger::Models::OutboundRequestLog.failed
-success_logs = OutboundHttpLogger::Models::OutboundRequestLog.successful
+error_logs   = OutboundHTTPLogger::Models::OutboundRequestLog.failed
+success_logs = OutboundHTTPLogger::Models::OutboundRequestLog.successful
 
 # Find by HTTP method
-post_logs = OutboundHttpLogger::Models::OutboundRequestLog.with_method('POST')
+post_logs = OutboundHTTPLogger::Models::OutboundRequestLog.with_method('POST')
 
 # Find logs associated with a specific model
-user_logs = OutboundHttpLogger::Models::OutboundRequestLog.for_loggable(user)
+user_logs = OutboundHTTPLogger::Models::OutboundRequestLog.for_loggable(user)
 
 # Find slow requests (over 1 second by default)
-slow_logs = OutboundHttpLogger::Models::OutboundRequestLog.slow
+slow_logs = OutboundHTTPLogger::Models::OutboundRequestLog.slow
 
 # Search with multiple criteria
-results     = OutboundHttpLogger::Models::OutboundRequestLog.search(
+results     = OutboundHTTPLogger::Models::OutboundRequestLog.search(
   q: 'api.example.com',
   status: [200, 201],
   method: 'POST',
@@ -240,7 +240,7 @@ results     = OutboundHttpLogger::Models::OutboundRequestLog.search(
 
 ```ruby
 # Get recent logs
-recent_logs = OutboundHttpLogger::Models::OutboundRequestLog.recent.limit(10)
+recent_logs = OutboundHTTPLogger::Models::OutboundRequestLog.recent.limit(10)
 
 recent_logs.each do |log|
   puts "#{log.http_method} #{log.url} -> #{log.status_code} (#{log.formatted_duration})"
@@ -260,22 +260,22 @@ The gem provides a dedicated test namespace with powerful utilities for testing 
 require 'outbound_http_logger/test' # Required for test utilities
 
 # Configure test logging with separate database
-OutboundHttpLogger::Test.configure(
+OutboundHTTPLogger::Test.configure(
   database_url: 'sqlite3:///tmp/test_outbound_requests.sqlite3',
   adapter: :sqlite
 )
 
 # Or use PostgreSQL for tests
-OutboundHttpLogger::Test.configure(
+OutboundHTTPLogger::Test.configure(
   database_url: 'postgresql://localhost/test_outbound_logs',
   adapter: :postgresql
 )
 
 # Enable test logging
-OutboundHttpLogger::Test.enable!
+OutboundHTTPLogger::Test.enable!
 
 # Disable test logging
-OutboundHttpLogger::Test.disable!
+OutboundHTTPLogger::Test.disable!
 ```
 
 ### Test Utilities API
@@ -284,32 +284,32 @@ OutboundHttpLogger::Test.disable!
 require 'outbound_http_logger/test' # Required for test utilities
 
 # Count all logged outbound requests during tests
-total_requests = OutboundHttpLogger::Test.logs_count
+total_requests = OutboundHTTPLogger::Test.logs_count
 
 # Count requests by status code
-successful_requests = OutboundHttpLogger::Test.logs_with_status(200)
-error_requests = OutboundHttpLogger::Test.logs_with_status(500)
+successful_requests = OutboundHTTPLogger::Test.logs_with_status(200)
+error_requests = OutboundHTTPLogger::Test.logs_with_status(500)
 
 # Count requests for specific URLs
-api_requests = OutboundHttpLogger::Test.logs_for_url('api.example.com')
-webhook_requests = OutboundHttpLogger::Test.logs_for_url('webhooks')
+api_requests = OutboundHTTPLogger::Test.logs_for_url('api.example.com')
+webhook_requests = OutboundHTTPLogger::Test.logs_for_url('webhooks')
 
 # Get all logged requests
-all_logs = OutboundHttpLogger::Test.all_logs
+all_logs = OutboundHTTPLogger::Test.all_logs
 
 # Get logs matching specific criteria
-failed_requests = OutboundHttpLogger::Test.logs_matching(status: 500)
-api_posts = OutboundHttpLogger::Test.logs_matching(method: 'POST', url: 'api.example.com')
+failed_requests = OutboundHTTPLogger::Test.logs_matching(status: 500)
+api_posts = OutboundHTTPLogger::Test.logs_matching(method: 'POST', url: 'api.example.com')
 
 # Analyze request patterns
-analysis = OutboundHttpLogger::Test.analyze
+analysis = OutboundHTTPLogger::Test.analyze
 # Returns: { total: 100, successful: 95, failed: 5, success_rate: 95.0, average_duration: 250.5 }
 
 # Clear test logs manually (if needed)
-OutboundHttpLogger::Test.clear_logs!
+OutboundHTTPLogger::Test.clear_logs!
 
 # Reset test environment
-OutboundHttpLogger::Test.reset!
+OutboundHTTPLogger::Test.reset!
 ```
 
 ### Test Framework Integration
@@ -322,7 +322,7 @@ require 'outbound_http_logger/test' # Required for test utilities
 
 module ActiveSupport
   class TestCase
-    include OutboundHttpLogger::Test::Helpers
+    include OutboundHTTPLogger::Test::Helpers
 
     setup do
       setup_outbound_http_logger_test(
@@ -351,8 +351,8 @@ class APIIntegrationTest < ActiveSupport::TestCase
     assert_outbound_request_count(1)
 
     # Or use direct API
-    assert_equal 1, OutboundHttpLogger::Test.logs_count
-    assert_equal 1, OutboundHttpLogger::Test.logs_with_status(201).count
+    assert_equal 1, OutboundHTTPLogger::Test.logs_count
+    assert_equal 1, OutboundHTTPLogger::Test.logs_with_status(201).count
   end
 
   test 'analyzes outbound request patterns' do
@@ -362,7 +362,7 @@ class APIIntegrationTest < ActiveSupport::TestCase
     HTTParty.get('https://api.example.com/users')    # 200
     HTTParty.get('https://api.example.com/missing')  # 404
 
-    analysis = OutboundHttpLogger::Test.analyze
+    analysis = OutboundHTTPLogger::Test.analyze
     assert_equal 2, analysis[:total]
     assert_equal 50.0, analysis[:success_rate]
     assert_outbound_success_rate(50.0, tolerance: 0.1)
@@ -377,7 +377,7 @@ end
 require 'outbound_http_logger/test' # Required for test utilities
 
 RSpec.configure do |config|
-  config.include OutboundHttpLogger::Test::Helpers
+  config.include OutboundHTTPLogger::Test::Helpers
 
   config.before(:each) do
     setup_outbound_http_logger_test
@@ -396,7 +396,7 @@ RSpec.describe 'Outbound API logging' do
 
     HTTParty.get('https://api.example.com/users')
 
-    expect(OutboundHttpLogger::Test.logs_count).to eq(1)
+    expect(OutboundHTTPLogger::Test.logs_count).to eq(1)
     assert_outbound_request_logged('GET', 'https://api.example.com/users')
     assert_outbound_success_rate(100.0)
   end
@@ -413,7 +413,7 @@ For parallel testing frameworks, use the thread-safe configuration override:
 
 ```ruby
 # Thread-safe configuration changes for testing
-OutboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+OutboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
   # Configuration changes only affect current thread
   # Other test threads are unaffected
   # Automatically restored when block exits
@@ -426,19 +426,19 @@ For advanced test scenarios, you can manually backup and restore configuration:
 
 ```ruby
 # Backup current configuration
-backup = OutboundHttpLogger::Test.backup_configuration
+backup = OutboundHTTPLogger::Test.backup_configuration
 
 # Make changes
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   config.enabled = false
   config.excluded_urls << 'https://skip-this.com'
 end
 
 # Restore original configuration
-OutboundHttpLogger::Test.restore_configuration(backup)
+OutboundHTTPLogger::Test.restore_configuration(backup)
 
 # Or use the helper method for isolated configuration changes
-OutboundHttpLogger::Test.with_configuration(enabled: false) do
+OutboundHTTPLogger::Test.with_configuration(enabled: false) do
   # Configuration changes are automatically restored after block
   # This is the recommended approach for most test scenarios
 end
@@ -448,7 +448,7 @@ end
 
 ```ruby
 describe 'My Feature' do
-  include OutboundHttpLogger::Test::Helpers
+  include OutboundHTTPLogger::Test::Helpers
 
   it 'logs requests with thread-safe configuration' do
     # Uses the simplified thread-safe configuration system
@@ -472,7 +472,7 @@ RSpec.describe 'Parallel API tests', parallel: true do
     with_thread_safe_configuration(max_body_size: 5000, debug_logging: true) do
       # This configuration only affects this test thread
       HTTParty.post('https://api.example.com/large-data', body: large_payload)
-      expect(OutboundHttpLogger::Test.logs_count).to eq(1)
+      expect(OutboundHTTPLogger::Test.logs_count).to eq(1)
     end
   end
 
@@ -480,7 +480,7 @@ RSpec.describe 'Parallel API tests', parallel: true do
     with_thread_safe_configuration(max_body_size: 1000, debug_logging: false) do
       # This configuration is isolated from test 1
       HTTParty.get('https://api.example.com/small-data')
-      expect(OutboundHttpLogger::Test.logs_count).to eq(1)
+      expect(OutboundHTTPLogger::Test.logs_count).to eq(1)
     end
   end
 end
@@ -491,7 +491,7 @@ end
 ### Custom Exclusions
 
 ```ruby
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   # Exclude specific URL patterns
   config.excluded_urls << %r{/webhooks}
   config.excluded_urls << /\.amazonaws\.com/
@@ -509,7 +509,7 @@ end
 ### Performance Tuning
 
 ```ruby
-OutboundHttpLogger.configure do |config|
+OutboundHTTPLogger.configure do |config|
   # Increase body size limit for APIs that return large responses
   config.max_body_size = 100_000 # 100KB
 
@@ -532,9 +532,9 @@ The gem includes specialized database adapters that leverage database-specific f
 
 ```ruby
 # PostgreSQL-specific queries
-OutboundHttpLogger::Models::OutboundRequestLog.with_response_containing('status', 'success')
-OutboundHttpLogger::Models::OutboundRequestLog.with_request_header('Authorization', 'Bearer token')
-OutboundHttpLogger::Models::OutboundRequestLog.with_metadata_containing('user_id', 123)
+OutboundHTTPLogger::Models::OutboundRequestLog.with_response_containing('status', 'success')
+OutboundHTTPLogger::Models::OutboundRequestLog.with_request_header('Authorization', 'Bearer token')
+OutboundHTTPLogger::Models::OutboundRequestLog.with_metadata_containing('user_id', 123)
 ```
 
 #### SQLite Adapter
@@ -544,8 +544,8 @@ OutboundHttpLogger::Models::OutboundRequestLog.with_metadata_containing('user_id
 
 ```ruby
 # SQLite-specific queries (same API as PostgreSQL)
-OutboundHttpLogger::Models::OutboundRequestLog.with_response_containing('error_code', '404')
-OutboundHttpLogger::Models::OutboundRequestLog.with_request_header('Content-Type', 'application/json')
+OutboundHTTPLogger::Models::OutboundRequestLog.with_response_containing('error_code', '404')
+OutboundHTTPLogger::Models::OutboundRequestLog.with_request_header('Content-Type', 'application/json')
 ```
 
 ### Migration Features

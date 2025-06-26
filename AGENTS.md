@@ -1,10 +1,10 @@
-# OutboundHttpLogger - Agent Development Guide
+# OutboundHTTPLogger - Agent Development Guide
 
-This document provides guidance for AI agents and developers working on the OutboundHttpLogger gem. It explains non-standard patterns, design decisions, and implementation details that may not be immediately obvious.
+This document provides guidance for AI agents and developers working on the OutboundHTTPLogger gem. It explains non-standard patterns, design decisions, and implementation details that may not be immediately obvious.
 
 ## Architecture Overview
 
-The OutboundHttpLogger gem is designed for production-safe outbound HTTP request logging with the following key principles:
+The OutboundHTTPLogger gem is designed for production-safe outbound HTTP request logging with the following key principles:
 
 1. **Failsafe Operation**: HTTP requests must never fail due to logging errors
 2. **Thread Safety**: Full support for multi-threaded applications and parallel testing
@@ -20,7 +20,7 @@ The gem implements a simple thread-safe configuration system for parallel testin
 
 ```ruby
 # Thread-safe temporary configuration override
-OutboundHttpLogger.with_configuration(enabled: true, debug_logging: true) do
+OutboundHTTPLogger.with_configuration(enabled: true, debug_logging: true) do
   # Configuration changes only affect current thread
   # Automatically restored when block exits
   # Safe for parallel testing
@@ -79,7 +79,7 @@ end
 Global configuration initialization uses mutex protection to prevent race conditions:
 
 ```ruby
-module OutboundHttpLogger
+module OutboundHTTPLogger
   @config_mutex = Mutex.new
 
   def self.global_configuration
@@ -161,7 +161,7 @@ def log_request(request, response)
   # Logging logic here
 rescue StandardError => e
   # Log error but don't re-raise
-  logger&.error("OutboundHttpLogger error: #{e.message}")
+  logger&.error("OutboundHTTPLogger error: #{e.message}")
 end
 ```
 
@@ -201,13 +201,13 @@ end
 ```ruby
 # Minitest helpers
 def setup_outbound_http_logger_test
-  OutboundHttpLogger::Test.configure
-  OutboundHttpLogger::Test.enable!
+  OutboundHTTPLogger::Test.configure
+  OutboundHTTPLogger::Test.enable!
 end
 
 # RSpec helpers
 RSpec.configure do |config|
-  config.include OutboundHttpLogger::Test::Helpers
+  config.include OutboundHTTPLogger::Test::Helpers
 end
 ```
 
@@ -217,8 +217,8 @@ end
 
 ```ruby
 def teardown
-  OutboundHttpLogger.disable!
-  OutboundHttpLogger.clear_thread_data
+  OutboundHTTPLogger.disable!
+  OutboundHTTPLogger.clear_thread_data
 end
 ```
 
@@ -250,7 +250,7 @@ end
 
 ```ruby
 # Optional secondary database for logging
-OutboundHttpLogger.enable_secondary_logging!(
+OutboundHTTPLogger.enable_secondary_logging!(
   'postgresql://localhost/outbound_logs',
   adapter: :postgresql
 )
@@ -271,7 +271,7 @@ ActiveRecord::Base.configurations.configurations << ActiveRecord::DatabaseConfig
 )
 
 # ✅ Correct - Dynamic model classes with custom connection method
-klass = Class.new(OutboundHttpLogger::Models::OutboundRequestLog) do
+klass = Class.new(OutboundHTTPLogger::Models::OutboundRequestLog) do
   @adapter_connection_name = adapter_connection_name
 
   def self.connection
@@ -310,11 +310,11 @@ def log_request(...)
     model_class.create!(request_data)
   rescue ActiveRecord::ConnectionNotEstablished => e
     # Log error but don't crash the app
-    logger.error "OutboundHttpLogger: Database connection failed: #{e.message}"
+    logger.error "OutboundHTTPLogger: Database connection failed: #{e.message}"
     return false
   rescue StandardError => e
     # Log unexpected errors but don't crash the app
-    logger.error "OutboundHttpLogger: Failed to log request: #{e.message}"
+    logger.error "OutboundHTTPLogger: Failed to log request: #{e.message}"
     return false
   end
 end
@@ -330,7 +330,7 @@ def connection
   end
 rescue ActiveRecord::ConnectionNotEstablished => e
   # Don't fall back silently - log the specific issue
-  logger.error "OutboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+  logger.error "OutboundHTTPLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
   raise
 end
 
@@ -403,7 +403,7 @@ end
 
 ```ruby
 # Check enabled state first to avoid unnecessary work
-return unless OutboundHttpLogger.enabled?
+return unless OutboundHTTPLogger.enabled?
 ```
 
 **Rule**: Always check if logging is enabled before performing any logging-related work.
@@ -433,12 +433,12 @@ When tests fail when run together but pass individually, use systematic debuggin
    # Solution: Proper setup/teardown with reset_configuration!
 
    def setup
-     OutboundHttpLogger.reset_configuration!
+     OutboundHTTPLogger.reset_configuration!
    end
 
    def teardown
-     OutboundHttpLogger.disable!
-     OutboundHttpLogger.clear_all_thread_data
+     OutboundHTTPLogger.disable!
+     OutboundHTTPLogger.clear_all_thread_data
    end
    ```
 
@@ -448,24 +448,24 @@ When tests fail when run together but pass individually, use systematic debuggin
    # Solution: Always set test logger to avoid Rails.logger fallback
 
    def with_logging_enabled
-     OutboundHttpLogger.configure do |config|
+     OutboundHTTPLogger.configure do |config|
        config.enabled = true
        config.logger = Logger.new(StringIO.new) unless config.logger
      end
      yield
    ensure
-     OutboundHttpLogger.disable!
+     OutboundHTTPLogger.disable!
    end
    ```
 
 3. **Configuration Method Conflicts**:
    ```ruby
    # Problem: Mixing configuration approaches
-   OutboundHttpLogger.with_configuration(enabled: true) do
+   OutboundHTTPLogger.with_configuration(enabled: true) do
      with_logging_enabled do  # This creates conflicts!
 
    # Solution: Use single, consistent approach
-   OutboundHttpLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
+   OutboundHTTPLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
    ```
 
 ### Test File Organization
@@ -523,7 +523,7 @@ This detects:
 
 ## Summary
 
-This document captures the key design decisions and patterns used in OutboundHttpLogger. When working on this codebase:
+This document captures the key design decisions and patterns used in OutboundHTTPLogger. When working on this codebase:
 
 1. **Always prioritize production safety** - HTTP requests must never fail due to logging
 2. **Maintain thread safety** - Use proper synchronization and thread-local storage

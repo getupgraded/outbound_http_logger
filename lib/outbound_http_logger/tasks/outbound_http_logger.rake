@@ -5,10 +5,10 @@ namespace :outbound_http_logger do
   task analyze: :environment do
     require 'outbound_http_logger'
 
-    logs        = OutboundHttpLogger::Models::OutboundRequestLog.all
+    logs        = OutboundHTTPLogger::Models::OutboundRequestLog.all
     total_count = logs.count
 
-    puts "=== OutboundHttpLogger Analysis ==="
+    puts "=== OutboundHTTPLogger Analysis ==="
     puts
     puts "Total outbound request logs: #{total_count}"
 
@@ -91,11 +91,11 @@ namespace :outbound_http_logger do
 
     puts
     puts "=== Configuration Status ==="
-    puts "  Enabled: #{OutboundHttpLogger.enabled?}"
-    puts "  Debug logging: #{OutboundHttpLogger.configuration.debug_logging}"
-    puts "  Max body size: #{OutboundHttpLogger.configuration.max_body_size} bytes"
-    puts "  Excluded URLs: #{OutboundHttpLogger.configuration.excluded_urls.size} patterns"
-    puts "  Sensitive headers: #{OutboundHttpLogger.configuration.sensitive_headers.size} headers"
+    puts "  Enabled: #{OutboundHTTPLogger.enabled?}"
+    puts "  Debug logging: #{OutboundHTTPLogger.configuration.debug_logging}"
+    puts "  Max body size: #{OutboundHTTPLogger.configuration.max_body_size} bytes"
+    puts "  Excluded URLs: #{OutboundHTTPLogger.configuration.excluded_urls.size} patterns"
+    puts "  Sensitive headers: #{OutboundHTTPLogger.configuration.sensitive_headers.size} headers"
     puts
   end
 
@@ -108,7 +108,7 @@ namespace :outbound_http_logger do
 
     puts "Cleaning up outbound request logs older than #{days} days (before #{cutoff_date.strftime('%Y-%m-%d %H:%M:%S')})..."
 
-    deleted_count = OutboundHttpLogger::Models::OutboundRequestLog.where('created_at < ?', cutoff_date).delete_all
+    deleted_count = OutboundHTTPLogger::Models::OutboundRequestLog.where('created_at < ?', cutoff_date).delete_all
 
     puts "Deleted #{deleted_count} old outbound request logs."
   end
@@ -117,7 +117,7 @@ namespace :outbound_http_logger do
   task failed: :environment do
     require 'outbound_http_logger'
 
-    failed_logs = OutboundHttpLogger::Models::OutboundRequestLog
+    failed_logs = OutboundHTTPLogger::Models::OutboundRequestLog
                     .where('status_code >= ?', 400)
                     .order(created_at: :desc)
                     .limit(20)
@@ -143,7 +143,7 @@ namespace :outbound_http_logger do
 
     threshold = (args[:threshold] || 1000).to_i
 
-    slow_logs = OutboundHttpLogger::Models::OutboundRequestLog
+    slow_logs = OutboundHTTPLogger::Models::OutboundRequestLog
                   .where('duration_ms > ?', threshold)
                   .order(duration_ms: :desc)
                   .limit(20)

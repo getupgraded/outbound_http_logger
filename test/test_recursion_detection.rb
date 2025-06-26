@@ -3,7 +3,7 @@
 require 'test_helper'
 
 describe 'Recursion Detection' do
-  let(:config) { OutboundHttpLogger.configuration }
+  let(:config) { OutboundHTTPLogger.configuration }
 
   before do
     # Clear any existing recursion state
@@ -92,7 +92,7 @@ describe 'Recursion Detection' do
       _(config.current_recursion_depth('test')).must_equal 2
 
       # Should raise at depth 2 (>= max of 2)
-      error = _(proc { config.check_recursion_depth!('test') }).must_raise OutboundHttpLogger::InfiniteRecursionError
+      error = _(proc { config.check_recursion_depth!('test') }).must_raise OutboundHTTPLogger::InfiniteRecursionError
       _(error.message).must_include 'Infinite recursion detected in test'
       _(error.message).must_include 'depth: 2'
     end
@@ -100,7 +100,7 @@ describe 'Recursion Detection' do
     it 'provides helpful error message' do
       2.times { config.increment_recursion_depth('faraday') }
 
-      error = _(proc { config.check_recursion_depth!('faraday') }).must_raise OutboundHttpLogger::InfiniteRecursionError
+      error = _(proc { config.check_recursion_depth!('faraday') }).must_raise OutboundHTTPLogger::InfiniteRecursionError
       _(error.message).must_include 'faraday'
       _(error.message).must_include 'HTTP library is being used within the logging process'
       _(error.message).must_include 'Check your logger configuration'

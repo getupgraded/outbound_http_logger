@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   class Logger
     attr_reader :configuration
 

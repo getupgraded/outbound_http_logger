@@ -12,11 +12,11 @@ class TestThreadSafeConfiguration < Minitest::Test
 
     threads = Array.new(2) do |i|
       Thread.new do # rubocop:disable ThreadSafety/NewThread
-        OutboundHttpLogger.with_configuration(enabled: i.even?, debug_logging: i.even?) do
+        OutboundHTTPLogger.with_configuration(enabled: i.even?, debug_logging: i.even?) do
           sleep 0.1 # Allow other thread to potentially interfere
           results[i] = {
-            enabled: OutboundHttpLogger.configuration.enabled?,
-            debug_logging: OutboundHttpLogger.configuration.debug_logging
+            enabled: OutboundHTTPLogger.configuration.enabled?,
+            debug_logging: OutboundHTTPLogger.configuration.debug_logging
           }
         end
       rescue StandardError => e
@@ -40,34 +40,34 @@ class TestThreadSafeConfiguration < Minitest::Test
 
   def test_nested_configuration_overrides
     # Test that nested overrides work correctly
-    original_enabled = OutboundHttpLogger.configuration.enabled?
-    original_debug = OutboundHttpLogger.configuration.debug_logging
+    original_enabled = OutboundHTTPLogger.configuration.enabled?
+    original_debug = OutboundHTTPLogger.configuration.debug_logging
 
-    OutboundHttpLogger.with_configuration(enabled: true, debug_logging: false) do
-      assert_predicate OutboundHttpLogger.configuration, :enabled?
-      refute OutboundHttpLogger.configuration.debug_logging
+    OutboundHTTPLogger.with_configuration(enabled: true, debug_logging: false) do
+      assert_predicate OutboundHTTPLogger.configuration, :enabled?
+      refute OutboundHTTPLogger.configuration.debug_logging
 
-      OutboundHttpLogger.with_configuration(debug_logging: true) do
-        assert_predicate OutboundHttpLogger.configuration, :enabled?
-        assert OutboundHttpLogger.configuration.debug_logging
+      OutboundHTTPLogger.with_configuration(debug_logging: true) do
+        assert_predicate OutboundHTTPLogger.configuration, :enabled?
+        assert OutboundHTTPLogger.configuration.debug_logging
       end
 
       # Should restore to outer override
-      assert_predicate OutboundHttpLogger.configuration, :enabled?
-      refute OutboundHttpLogger.configuration.debug_logging
+      assert_predicate OutboundHTTPLogger.configuration, :enabled?
+      refute OutboundHTTPLogger.configuration.debug_logging
     end
 
     # Should restore to original
-    assert_equal original_enabled, OutboundHttpLogger.configuration.enabled?
-    assert_equal original_debug, OutboundHttpLogger.configuration.debug_logging
+    assert_equal original_enabled, OutboundHTTPLogger.configuration.enabled?
+    assert_equal original_debug, OutboundHTTPLogger.configuration.debug_logging
   end
 
   def test_configuration_restoration_on_exception
-    original_enabled = OutboundHttpLogger.configuration.enabled?
+    original_enabled = OutboundHTTPLogger.configuration.enabled?
 
     begin
-      OutboundHttpLogger.with_configuration(enabled: true) do
-        assert_predicate OutboundHttpLogger.configuration, :enabled?
+      OutboundHTTPLogger.with_configuration(enabled: true) do
+        assert_predicate OutboundHTTPLogger.configuration, :enabled?
         raise StandardError, 'Test exception'
       end
     rescue StandardError => e
@@ -75,67 +75,67 @@ class TestThreadSafeConfiguration < Minitest::Test
     end
 
     # Configuration should be restored even after exception
-    assert_equal original_enabled, OutboundHttpLogger.configuration.enabled?
+    assert_equal original_enabled, OutboundHTTPLogger.configuration.enabled?
   end
 
   def test_empty_overrides_no_op
-    original_config = OutboundHttpLogger.configuration
+    original_config = OutboundHTTPLogger.configuration
 
-    OutboundHttpLogger.with_configuration do
+    OutboundHTTPLogger.with_configuration do
       # Should be the same configuration object
-      assert_same original_config, OutboundHttpLogger.configuration
+      assert_same original_config, OutboundHTTPLogger.configuration
     end
   end
 
   def test_array_configuration_isolation
     # Test that array configurations are properly isolated
-    original_excluded_urls = OutboundHttpLogger.configuration.excluded_urls.dup
+    original_excluded_urls = OutboundHTTPLogger.configuration.excluded_urls.dup
 
-    OutboundHttpLogger.with_configuration(excluded_urls: ['/test']) do
-      assert_equal ['/test'], OutboundHttpLogger.configuration.excluded_urls
+    OutboundHTTPLogger.with_configuration(excluded_urls: ['/test']) do
+      assert_equal ['/test'], OutboundHTTPLogger.configuration.excluded_urls
 
       # Modify the array in the override
-      OutboundHttpLogger.configuration.excluded_urls << '/another'
+      OutboundHTTPLogger.configuration.excluded_urls << '/another'
 
-      assert_includes OutboundHttpLogger.configuration.excluded_urls, '/another'
+      assert_includes OutboundHTTPLogger.configuration.excluded_urls, '/another'
     end
 
     # Original should be unchanged
-    assert_equal original_excluded_urls, OutboundHttpLogger.configuration.excluded_urls
-    refute_includes OutboundHttpLogger.configuration.excluded_urls, '/test'
-    refute_includes OutboundHttpLogger.configuration.excluded_urls, '/another'
+    assert_equal original_excluded_urls, OutboundHTTPLogger.configuration.excluded_urls
+    refute_includes OutboundHTTPLogger.configuration.excluded_urls, '/test'
+    refute_includes OutboundHTTPLogger.configuration.excluded_urls, '/another'
   end
 
   def test_collection_access
     # Test that collections are accessible
-    excluded_urls = OutboundHttpLogger.configuration.excluded_urls
+    excluded_urls = OutboundHTTPLogger.configuration.excluded_urls
 
     assert_kind_of Array, excluded_urls
 
-    excluded_content_types = OutboundHttpLogger.configuration.excluded_content_types
+    excluded_content_types = OutboundHTTPLogger.configuration.excluded_content_types
 
     assert_kind_of Array, excluded_content_types
 
-    sensitive_headers = OutboundHttpLogger.configuration.sensitive_headers
+    sensitive_headers = OutboundHTTPLogger.configuration.sensitive_headers
 
     assert_kind_of Array, sensitive_headers
   end
 
   def test_global_configuration_access
     # Test that global_configuration bypasses thread-local overrides
-    OutboundHttpLogger.with_configuration(enabled: true) do
+    OutboundHTTPLogger.with_configuration(enabled: true) do
       # Thread-local override should affect regular configuration access
-      assert_predicate OutboundHttpLogger.configuration, :enabled?
+      assert_predicate OutboundHTTPLogger.configuration, :enabled?
 
       # But global_configuration should bypass the override
-      global_config = OutboundHttpLogger.global_configuration
+      global_config = OutboundHTTPLogger.global_configuration
       # The global config's enabled state depends on test setup, so we just verify it's accessible
       assert_respond_to global_config, :enabled?
     end
   end
 
   def test_configuration_backup_and_restore
-    config = OutboundHttpLogger.configuration
+    config = OutboundHTTPLogger.configuration
 
     # Create backup
     backup = config.backup
@@ -164,9 +164,9 @@ class TestThreadSafeConfiguration < Minitest::Test
 
   def test_thread_local_data_clearing
     # Set some thread-local data
-    OutboundHttpLogger.set_metadata({ test: 'data' })
-    OutboundHttpLogger.set_loggable('test_object')
-    Thread.current[:outbound_http_logger_config_override] = OutboundHttpLogger::Configuration.new
+    OutboundHTTPLogger.set_metadata({ test: 'data' })
+    OutboundHTTPLogger.set_loggable('test_object')
+    Thread.current[:outbound_http_logger_config_override] = OutboundHTTPLogger::Configuration.new
 
     # Verify data is set
     assert_equal({ test: 'data' }, Thread.current[:outbound_http_logger_metadata])
@@ -174,7 +174,7 @@ class TestThreadSafeConfiguration < Minitest::Test
     refute_nil Thread.current[:outbound_http_logger_config_override]
 
     # Clear thread data
-    OutboundHttpLogger.clear_all_thread_data
+    OutboundHTTPLogger.clear_all_thread_data
 
     # Verify data is cleared
     assert_nil Thread.current[:outbound_http_logger_metadata]
@@ -184,15 +184,15 @@ class TestThreadSafeConfiguration < Minitest::Test
 
   def test_with_thread_safe_configuration_helper
     # Test the helper method from TestHelpers
-    original_enabled = OutboundHttpLogger.configuration.enabled?
+    original_enabled = OutboundHTTPLogger.configuration.enabled?
 
     with_thread_safe_configuration(enabled: !original_enabled, max_body_size: 5000) do
-      assert_equal !original_enabled, OutboundHttpLogger.configuration.enabled?
-      assert_equal 5000, OutboundHttpLogger.configuration.max_body_size
+      assert_equal !original_enabled, OutboundHTTPLogger.configuration.enabled?
+      assert_equal 5000, OutboundHTTPLogger.configuration.max_body_size
     end
 
     # Should restore original values
-    assert_equal original_enabled, OutboundHttpLogger.configuration.enabled?
-    refute_equal 5000, OutboundHttpLogger.configuration.max_body_size
+    assert_equal original_enabled, OutboundHTTPLogger.configuration.enabled?
+    refute_equal 5000, OutboundHTTPLogger.configuration.max_body_size
   end
 end

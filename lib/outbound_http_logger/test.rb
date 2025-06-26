@@ -2,7 +2,7 @@
 
 require 'active_record'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Test
     class << self
       # Configure test logging with a separate database
@@ -40,7 +40,7 @@ module OutboundHttpLogger
 
         @test_adapter.clear_logs
       rescue StandardError => e
-        OutboundHttpLogger.configuration.get_logger&.debug("OutboundHttpLogger::Test: Error clearing logs: #{e.message}")
+        OutboundHTTPLogger.configuration.get_logger&.debug("OutboundHTTPLogger::Test: Error clearing logs: #{e.message}")
       end
 
       # Count total logs
@@ -129,17 +129,17 @@ module OutboundHttpLogger
 
       # Backup current configuration state
       def backup_configuration
-        OutboundHttpLogger.configuration.backup
+        OutboundHTTPLogger.configuration.backup
       end
 
       # Restore configuration from backup
       def restore_configuration(backup)
-        OutboundHttpLogger.configuration.restore(backup)
+        OutboundHTTPLogger.configuration.restore(backup)
       end
 
       # Execute a block with modified configuration, then restore original
       def with_configuration(**, &)
-        OutboundHttpLogger.with_configuration(**, &)
+        OutboundHTTPLogger.with_configuration(**, &)
       end
 
       private
@@ -175,29 +175,29 @@ module OutboundHttpLogger
     module Helpers
       # Setup test logging
       def setup_outbound_http_logger_test(database_url: nil, adapter: :sqlite)
-        OutboundHttpLogger::Test.configure(database_url: database_url, adapter: adapter)
-        OutboundHttpLogger::Test.enable!
-        OutboundHttpLogger::Test.clear_logs!
+        OutboundHTTPLogger::Test.configure(database_url: database_url, adapter: adapter)
+        OutboundHTTPLogger::Test.enable!
+        OutboundHTTPLogger::Test.clear_logs!
       end
 
       # Teardown test logging
       def teardown_outbound_http_logger_test
-        OutboundHttpLogger::Test.reset!
+        OutboundHTTPLogger::Test.reset!
       end
 
       # Backup current configuration state
       def backup_outbound_http_logger_configuration
-        OutboundHttpLogger::Test.backup_configuration
+        OutboundHTTPLogger::Test.backup_configuration
       end
 
       # Restore configuration from backup
       def restore_outbound_http_logger_configuration(backup)
-        OutboundHttpLogger::Test.restore_configuration(backup)
+        OutboundHTTPLogger::Test.restore_configuration(backup)
       end
 
       # Execute a block with modified configuration, then restore original
       def with_outbound_http_logger_configuration(**, &)
-        OutboundHttpLogger::Test.with_configuration(**, &)
+        OutboundHTTPLogger::Test.with_configuration(**, &)
       end
 
       # Setup test with isolated configuration (recommended for most tests)
@@ -224,7 +224,7 @@ module OutboundHttpLogger
       end
 
       def assert_outbound_request_logged(method, url, status: nil)
-        logs = OutboundHttpLogger::Test.all_logs.select do |log|
+        logs = OutboundHTTPLogger::Test.all_logs.select do |log|
           log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
         end
 
@@ -234,16 +234,16 @@ module OutboundHttpLogger
 
       def assert_outbound_request_count(expected_count, criteria = {})
         actual_count = if criteria.empty?
-                         OutboundHttpLogger::Test.logs_count
+                         OutboundHTTPLogger::Test.logs_count
                        else
-                         OutboundHttpLogger::Test.logs_matching(criteria).count
+                         OutboundHTTPLogger::Test.logs_matching(criteria).count
                        end
 
         assert_equal expected_count, actual_count, "Expected #{expected_count} outbound requests, got #{actual_count}"
       end
 
       def assert_outbound_success_rate(expected_rate, tolerance: 0.1)
-        analysis = OutboundHttpLogger::Test.analyze
+        analysis = OutboundHTTPLogger::Test.analyze
         actual_rate = analysis[:success_rate]
 
         assert_in_delta expected_rate, actual_rate, tolerance,

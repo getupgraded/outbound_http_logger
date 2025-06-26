@@ -4,7 +4,7 @@ require_relative 'lib/outbound_http_logger/version'
 
 Gem::Specification.new do |spec|
   spec.name    = 'outbound_http_logger'
-  spec.version = OutboundHttpLogger::VERSION
+  spec.version = OutboundHTTPLogger::VERSION
   spec.authors = ['Ziad Sawalha']
   spec.email   = ['ziad@getupgraded.com']
 

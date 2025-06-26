@@ -7,20 +7,20 @@ require 'minitest/autorun'
 class TestDatabaseAdapters < Minitest::Test
   def setup
     # Ensure clean state
-    OutboundHttpLogger::Test.reset!
-    # Enable OutboundHttpLogger globally for tests
-    OutboundHttpLogger.enable!
+    OutboundHTTPLogger::Test.reset!
+    # Enable OutboundHTTPLogger globally for tests
+    OutboundHTTPLogger.enable!
   end
 
   def teardown
     # Clean up after each test
-    OutboundHttpLogger::Test.clear_logs! if OutboundHttpLogger::Test.enabled?
-    OutboundHttpLogger::Test.reset!
-    OutboundHttpLogger.disable!
+    OutboundHTTPLogger::Test.clear_logs! if OutboundHTTPLogger::Test.enabled?
+    OutboundHTTPLogger::Test.reset!
+    OutboundHTTPLogger.disable!
   end
 
   def test_sqlite_adapter_creation
-    adapter = OutboundHttpLogger::DatabaseAdapters::SqliteAdapter.new(
+    adapter = OutboundHTTPLogger::DatabaseAdapters::SqliteAdapter.new(
       'sqlite3:///tmp/test_outbound.sqlite3',
       :test_connection
     )
@@ -33,19 +33,19 @@ class TestDatabaseAdapters < Minitest::Test
   def test_sqlite_adapter_logging
     skip 'SQLite3 gem not available' unless sqlite_available?
 
-    OutboundHttpLogger::Test.configure(
+    OutboundHTTPLogger::Test.configure(
       database_url: 'sqlite3:///tmp/test_outbound_adapter.sqlite3',
       adapter: :sqlite
     )
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
     # Log a request through the adapter
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
 
     # Debug: check if adapter is enabled
     assert_predicate adapter, :enabled?, 'Adapter should be enabled'
-    assert_predicate OutboundHttpLogger, :enabled?, 'OutboundHttpLogger should be enabled'
+    assert_predicate OutboundHTTPLogger, :enabled?, 'OutboundHTTPLogger should be enabled'
 
     log_entry = adapter.log_request(
       :get,
@@ -62,18 +62,18 @@ class TestDatabaseAdapters < Minitest::Test
     assert_in_delta(500.0, log_entry.duration_ms)
 
     # Test counting
-    assert_equal 1, OutboundHttpLogger::Test.logs_count
+    assert_equal 1, OutboundHTTPLogger::Test.logs_count
   end
 
   def test_sqlite_adapter_json_queries
     skip 'SQLite3 gem not available' unless sqlite_available?
 
-    OutboundHttpLogger::Test.configure(adapter: :sqlite)
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.configure(adapter: :sqlite)
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
     # Log a request with JSON data through the adapter
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
     log_entry = adapter.log_request(
       :post,
       'https://api.example.com/create',
@@ -101,7 +101,7 @@ class TestDatabaseAdapters < Minitest::Test
   end
 
   def test_postgresql_adapter_creation
-    adapter = OutboundHttpLogger::DatabaseAdapters::PostgresqlAdapter.new(
+    adapter = OutboundHTTPLogger::DatabaseAdapters::PostgresqlAdapter.new(
       'postgresql://localhost/test_db',
       :test_connection
     )
@@ -116,15 +116,15 @@ class TestDatabaseAdapters < Minitest::Test
     database_url = ENV['OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
                    'postgresql://postgres:@localhost:5432/outbound_http_logger_test'
 
-    OutboundHttpLogger::Test.configure(
+    OutboundHTTPLogger::Test.configure(
       database_url: database_url,
       adapter: :postgresql
     )
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
     # Log a request through the adapter
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
     log_entry = adapter.log_request(
       :post,
       'https://api.example.com/webhook',
@@ -140,7 +140,7 @@ class TestDatabaseAdapters < Minitest::Test
     assert_in_delta(800.0, log_entry.duration_ms)
 
     # Test counting
-    assert_equal 1, OutboundHttpLogger::Test.logs_count
+    assert_equal 1, OutboundHTTPLogger::Test.logs_count
 
     # Test JSON storage format for PostgreSQL
     return unless postgresql_available?
@@ -158,11 +158,11 @@ class TestDatabaseAdapters < Minitest::Test
     skip 'SQLite3 gem not available' unless sqlite_available?
 
     # Test that logging gracefully handles errors without breaking
-    OutboundHttpLogger::Test.configure(adapter: :sqlite)
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.configure(adapter: :sqlite)
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
 
     # Test that the adapter doesn't raise exceptions even with problematic data
     # This should succeed since SQLite can handle binary data
@@ -183,36 +183,36 @@ class TestDatabaseAdapters < Minitest::Test
 
   def test_unsupported_adapter
     assert_raises(ArgumentError) do
-      OutboundHttpLogger::Test.configure(adapter: :unsupported)
+      OutboundHTTPLogger::Test.configure(adapter: :unsupported)
     end
   end
 
   def test_test_utilities_configuration
     skip 'SQLite3 gem not available' unless sqlite_available?
 
-    OutboundHttpLogger::Test.configure(
+    OutboundHTTPLogger::Test.configure(
       database_url: ':memory:',
       adapter: :sqlite
     )
 
-    OutboundHttpLogger::Test.enable!
+    OutboundHTTPLogger::Test.enable!
 
-    assert_predicate OutboundHttpLogger::Test, :enabled?
+    assert_predicate OutboundHTTPLogger::Test, :enabled?
 
-    OutboundHttpLogger::Test.disable!
+    OutboundHTTPLogger::Test.disable!
 
-    assert_not OutboundHttpLogger::Test.enabled?
+    assert_not OutboundHTTPLogger::Test.enabled?
   end
 
   def test_test_utilities_log_counting
     skip 'SQLite3 gem not available' unless sqlite_available?
 
-    OutboundHttpLogger::Test.configure(adapter: :sqlite)
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.configure(adapter: :sqlite)
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
     # Log a test request directly through the adapter
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
     log_entry = adapter.log_request(
       :get,
       'https://api.example.com/test',
@@ -222,9 +222,9 @@ class TestDatabaseAdapters < Minitest::Test
     )
 
     assert_not_nil log_entry
-    assert_equal 1, OutboundHttpLogger::Test.logs_count
+    assert_equal 1, OutboundHTTPLogger::Test.logs_count
 
-    analysis = OutboundHttpLogger::Test.analyze
+    analysis = OutboundHTTPLogger::Test.analyze
 
     assert_equal 1, analysis[:total]
     assert_equal 1, analysis[:successful]
@@ -237,15 +237,15 @@ class TestDatabaseAdapters < Minitest::Test
     database_url = ENV['OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL'] ||
                    'postgresql://postgres:@localhost:5432/outbound_http_logger_test'
 
-    OutboundHttpLogger::Test.configure(
+    OutboundHTTPLogger::Test.configure(
       database_url: database_url,
       adapter: :postgresql
     )
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
 
     # Test that the PostgreSQL adapter properly converts JSON strings to objects
-    adapter = OutboundHttpLogger::Test.instance_variable_get(:@test_adapter)
+    adapter = OutboundHTTPLogger::Test.instance_variable_get(:@test_adapter)
 
     # Test the prepare_json_data_for_postgresql method directly
     test_data = {
@@ -277,15 +277,15 @@ class TestDatabaseAdapters < Minitest::Test
     skip 'SQLite3 gem not available' unless sqlite_available?
 
     # Backup original configuration
-    backup = OutboundHttpLogger::Test.backup_configuration
+    backup = OutboundHTTPLogger::Test.backup_configuration
 
     # Modify configuration
-    OutboundHttpLogger::Test.with_configuration(enabled: false) do
-      assert_not OutboundHttpLogger.enabled?
+    OutboundHTTPLogger::Test.with_configuration(enabled: false) do
+      assert_not OutboundHTTPLogger.enabled?
     end
 
     # Configuration should be restored after block
-    OutboundHttpLogger::Test.restore_configuration(backup)
+    OutboundHTTPLogger::Test.restore_configuration(backup)
   end
 
   private

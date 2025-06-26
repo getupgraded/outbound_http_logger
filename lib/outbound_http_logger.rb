@@ -15,7 +15,7 @@ require_relative 'outbound_http_logger/patches/httparty_patch'
 require_relative 'outbound_http_logger/logger'
 require_relative 'outbound_http_logger/railtie' if defined?(Rails)
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   class Error < StandardError; end
   class InfiniteRecursionError < Error; end
 
@@ -96,7 +96,7 @@ module OutboundHttpLogger
     end
 
     # Clear thread-local data
-    # This method clears the core thread-local data used by OutboundHttpLogger
+    # This method clears the core thread-local data used by OutboundHTTPLogger
     # For comprehensive cleanup (including internal state), use clear_all_thread_data
     def clear_thread_data
       Thread.current[:outbound_http_logger_metadata] = nil

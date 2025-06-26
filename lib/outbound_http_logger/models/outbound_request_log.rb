@@ -3,7 +3,7 @@
 require 'active_record'
 require 'rack'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Models
     class OutboundRequestLog < ActiveRecord::Base
       self.table_name = 'outbound_request_logs'
@@ -58,7 +58,7 @@ module OutboundHttpLogger
       class << self
         # Log an outbound HTTP request with failsafe error handling
         def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
-          config = OutboundHttpLogger.configuration
+          config = OutboundHTTPLogger.configuration
           return nil unless config.enabled?
           return nil unless config.should_log_url?(url)
 
@@ -81,10 +81,10 @@ module OutboundHttpLogger
             http_method: method.to_s.upcase,
             url: url,
             status_code: response_data[:status_code] || 0,
-            request_headers: OutboundHttpLogger.configuration.filter_headers(request_data[:headers] || {}),
-            request_body: OutboundHttpLogger.configuration.filter_body(request_data[:body]),
-            response_headers: OutboundHttpLogger.configuration.filter_headers(response_data[:headers] || {}),
-            response_body: OutboundHttpLogger.configuration.filter_body(response_data[:body]),
+            request_headers: OutboundHTTPLogger.configuration.filter_headers(request_data[:headers] || {}),
+            request_body: OutboundHTTPLogger.configuration.filter_body(request_data[:body]),
+            response_headers: OutboundHTTPLogger.configuration.filter_headers(response_data[:headers] || {}),
+            response_body: OutboundHTTPLogger.configuration.filter_body(response_data[:body]),
             duration_seconds: duration_seconds,
             duration_ms: duration_ms,
             loggable: request_data[:loggable] || thread_loggable,
@@ -97,8 +97,8 @@ module OutboundHttpLogger
           create!(log_data)
         rescue StandardError => e
           # Failsafe: Never let logging errors break the HTTP request
-          logger = OutboundHttpLogger.configuration.get_logger
-          logger&.error("OutboundHttpLogger: Failed to log request: #{e.class}: #{e.message}")
+          logger = OutboundHTTPLogger.configuration.get_logger
+          logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
           nil
         end
 

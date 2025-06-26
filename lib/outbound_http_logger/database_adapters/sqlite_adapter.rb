@@ -3,7 +3,7 @@
 require 'fileutils'
 require_relative 'base_adapter'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module DatabaseAdapters
     class SqliteAdapter < BaseAdapter
       # Check if SQLite3 gem is available
@@ -12,7 +12,7 @@ module OutboundHttpLogger
           require 'sqlite3'
           true
         rescue LoadError
-          OutboundHttpLogger.configuration.get_logger&.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
+          OutboundHTTPLogger.configuration.get_logger&.warn('SQLite3 gem not available. SQLite logging disabled.') if @database_url.present?
           false
         end
       end
@@ -77,10 +77,10 @@ module OutboundHttpLogger
           class_name = "SqliteOutboundRequestLog#{adapter_connection_name.to_s.camelize}"
 
           # Remove existing class if it exists
-          OutboundHttpLogger::DatabaseAdapters.send(:remove_const, class_name) if OutboundHttpLogger::DatabaseAdapters.const_defined?(class_name)
+          OutboundHTTPLogger::DatabaseAdapters.send(:remove_const, class_name) if OutboundHTTPLogger::DatabaseAdapters.const_defined?(class_name)
 
           # Create the new class that inherits from the main model
-          klass = Class.new(OutboundHttpLogger::Models::OutboundRequestLog) do
+          klass = Class.new(OutboundHTTPLogger::Models::OutboundRequestLog) do
             self.table_name = 'outbound_request_logs'
 
             # Store the connection name for use in connection method
@@ -97,19 +97,19 @@ module OutboundHttpLogger
               end
             rescue ActiveRecord::ConnectionNotEstablished => e
               # Don't fall back silently - log the specific issue and re-raise
-              Rails.logger&.error "OutboundHttpLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
+              Rails.logger&.error "OutboundHTTPLogger: Cannot retrieve connection '#{@adapter_connection_name}': #{e.message}"
               raise
             end
 
             class << self
               def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
-                return nil unless OutboundHttpLogger.enabled?
-                return nil unless OutboundHttpLogger.configuration.should_log_url?(url)
+                return nil unless OutboundHTTPLogger.enabled?
+                return nil unless OutboundHTTPLogger.configuration.should_log_url?(url)
 
                 # Check content type filtering
                 content_type = response_data[:headers]&.[]('content-type') ||
                                response_data[:headers]&.[]('Content-Type')
-                return nil unless OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+                return nil unless OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
                 # Ensure table exists before logging
                 unless table_exists?
@@ -131,10 +131,10 @@ module OutboundHttpLogger
                   http_method: method.to_s.upcase,
                   url: url,
                   status_code: response_data[:status_code] || 0,
-                  request_headers: OutboundHttpLogger.configuration.filter_headers(request_data[:headers] || {}),
-                  request_body: OutboundHttpLogger.configuration.filter_body(request_data[:body]),
-                  response_headers: OutboundHttpLogger.configuration.filter_headers(response_data[:headers] || {}),
-                  response_body: OutboundHttpLogger.configuration.filter_body(response_data[:body]),
+                  request_headers: OutboundHTTPLogger.configuration.filter_headers(request_data[:headers] || {}),
+                  request_body: OutboundHTTPLogger.configuration.filter_body(request_data[:body]),
+                  response_headers: OutboundHTTPLogger.configuration.filter_headers(response_data[:headers] || {}),
+                  response_body: OutboundHTTPLogger.configuration.filter_body(response_data[:body]),
                   duration_ms: duration_ms,
                   loggable: request_data[:loggable] || thread_loggable,
                   metadata: merged_metadata
@@ -146,8 +146,8 @@ module OutboundHttpLogger
                 create!(log_data)
               rescue StandardError => e
                 # Failsafe: Never let logging errors break the HTTP request
-                logger = OutboundHttpLogger.configuration.get_logger
-                logger&.error("OutboundHttpLogger: Failed to log request: #{e.class}: #{e.message}")
+                logger = OutboundHTTPLogger.configuration.get_logger
+                logger&.error("OutboundHTTPLogger: Failed to log request: #{e.class}: #{e.message}")
                 nil
               end
 
@@ -244,7 +244,7 @@ module OutboundHttpLogger
           end
 
           # Assign the class to a constant to give it a name
-          OutboundHttpLogger::DatabaseAdapters.const_set(class_name, klass)
+          OutboundHTTPLogger::DatabaseAdapters.const_set(class_name, klass)
 
           klass
         end

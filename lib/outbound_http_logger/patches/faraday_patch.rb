@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Patches
     module FaradayPatch
       @mutex = Mutex.new
@@ -16,7 +16,7 @@ module OutboundHttpLogger
           Faraday::Connection.prepend(ConnectionMethods)
           @applied = true
 
-          OutboundHttpLogger.configuration.get_logger&.debug('OutboundHttpLogger: Faraday patch applied') if OutboundHttpLogger.configuration.debug_logging
+          OutboundHTTPLogger.configuration.get_logger&.debug('OutboundHTTPLogger: Faraday patch applied') if OutboundHTTPLogger.configuration.debug_logging
         end
       end
 
@@ -31,7 +31,7 @@ module OutboundHttpLogger
       module ConnectionMethods
         def run_request(method, url, body, headers, &)
           # Get configuration first to check if logging is enabled
-          config = OutboundHttpLogger.configuration
+          config = OutboundHTTPLogger.configuration
 
           # Early exit if logging is disabled
           return super unless config.enabled?
@@ -76,12 +76,12 @@ module OutboundHttpLogger
 
             # Check if content type should be excluded
             content_type = response_data[:headers]['content-type'] || response_data[:headers]['Content-Type']
-            should_log_content_type = OutboundHttpLogger.configuration.should_log_content_type?(content_type)
+            should_log_content_type = OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
             # Log the request only if content type is allowed
             if should_log_content_type
               duration_seconds = end_time - start_time
-              OutboundHttpLogger.logger.log_completed_request(
+              OutboundHTTPLogger.logger.log_completed_request(
                 method.to_s.upcase,
                 full_url.to_s,
                 request_data,
@@ -110,7 +110,7 @@ module OutboundHttpLogger
               body: "Error: #{e.class}: #{e.message}"
             }
 
-            OutboundHttpLogger.logger.log_completed_request(
+            OutboundHTTPLogger.logger.log_completed_request(
               method.to_s.upcase,
               full_url.to_s,
               request_data,

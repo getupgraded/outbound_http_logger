@@ -2,7 +2,7 @@
 
 require 'test_helper'
 
-describe OutboundHttpLogger::Concerns::OutboundLogging do
+describe OutboundHTTPLogger::Concerns::OutboundLogging do
   before do
     # Clear thread-local data before each test
     Thread.current[:outbound_http_logger_loggable] = nil
@@ -12,7 +12,7 @@ describe OutboundHttpLogger::Concerns::OutboundLogging do
   # Create a class that includes the concern
   let(:controller_class) do
     Class.new do
-      include OutboundHttpLogger::Concerns::OutboundLogging
+      include OutboundHTTPLogger::Concerns::OutboundLogging
     end
   end
 

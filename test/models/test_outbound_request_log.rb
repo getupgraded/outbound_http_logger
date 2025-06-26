@@ -2,15 +2,15 @@
 
 require 'test_helper'
 
-describe OutboundHttpLogger::Models::OutboundRequestLog do
-  let(:model) { OutboundHttpLogger::Models::OutboundRequestLog }
+describe OutboundHTTPLogger::Models::OutboundRequestLog do
+  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   before do
     # Reset database adapter cache
-    OutboundHttpLogger::Models::OutboundRequestLog.reset_adapter_cache!
+    OutboundHTTPLogger::Models::OutboundRequestLog.reset_adapter_cache!
 
     # Reset global configuration to default state
-    config = OutboundHttpLogger.global_configuration
+    config = OutboundHTTPLogger.global_configuration
     config.enabled                = false
     config.excluded_urls          = [
       %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
@@ -50,18 +50,18 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     config.logger                 = nil
 
     # Clear all logs
-    OutboundHttpLogger::Models::OutboundRequestLog.delete_all
+    OutboundHTTPLogger::Models::OutboundRequestLog.delete_all
 
     # Clear thread-local data
-    OutboundHttpLogger.clear_thread_data
+    OutboundHTTPLogger.clear_thread_data
   end
 
   after do
     # Disable logging
-    OutboundHttpLogger.disable!
+    OutboundHTTPLogger.disable!
 
     # Clear thread-local data
-    OutboundHttpLogger.clear_thread_data
+    OutboundHTTPLogger.clear_thread_data
   end
 
   describe 'validations' do
@@ -160,7 +160,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
 
   describe '.log_request' do
     it 'creates a log entry with all data' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         request_data = {
           headers: { 'Content-Type' => 'application/json', 'Authorization' => 'Bearer token' },
           body: '{"name": "test"}',
@@ -188,7 +188,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     end
 
     it 'returns nil when logging is disabled' do
-      OutboundHttpLogger.disable!
+      OutboundHTTPLogger.disable!
 
       log = model.log_request('GET', 'https://api.example.com/users', {}, {}, 0.1)
 
@@ -196,7 +196,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     end
 
     it 'returns nil for excluded URLs' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         log = model.log_request('GET', 'https://api.example.com/health', {}, {}, 0.1)
 
         _(log).must_be_nil
@@ -204,7 +204,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     end
 
     it 'returns nil for excluded content types' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         response_data = {
           status_code: 200,
           headers: { 'Content-Type' => 'text/html' },
@@ -351,7 +351,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
 
   describe 'loggable associations' do
     it 'can associate logs with metadata' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         request_data = {
           headers: { 'Content-Type' => 'application/json' },
           body: '{"test": true}',
@@ -401,7 +401,7 @@ describe OutboundHttpLogger::Models::OutboundRequestLog do
     end
 
     it 'handles nil loggable gracefully' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         request_data = {
           headers: { 'Content-Type' => 'application/json' },
           body: '{"test": true}',

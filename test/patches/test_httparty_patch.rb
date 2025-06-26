@@ -5,12 +5,12 @@ require 'httparty'
 
 describe 'HTTParty Patch' do
   before do
-    OutboundHttpLogger::Patches::HTTPartyPatch.apply!
+    OutboundHTTPLogger::Patches::HTTPartyPatch.apply!
   end
 
   describe 'when logging is enabled' do
     it 'logs successful GET requests' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/users')
           .to_return(status: 200, body: '{"users": []}', headers: { 'Content-Type' => 'application/json' })
 
@@ -25,7 +25,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'logs POST requests with request body' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:post, 'https://api.example.com/users')
           .with(body: '{"name": "John"}', headers: { 'Content-Type' => 'application/json' })
           .to_return(status: 201, body: '{"id": 1, "name": "John"}', headers: { 'Content-Type' => 'application/json' })
@@ -41,7 +41,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'logs requests with headers' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/protected')
           .with(headers: { 'Authorization' => 'Bearer token123' })
           .to_return(status: 200, body: '{"data": "secret"}', headers: { 'Content-Type' => 'application/json' })
@@ -56,7 +56,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'logs failed requests' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/notfound')
           .to_return(status: 404, body: '{"error": "Not found"}', headers: { 'Content-Type' => 'application/json' })
 
@@ -70,7 +70,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'skips excluded URLs' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/health')
           .to_return(status: 200, body: 'OK')
 
@@ -82,7 +82,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'skips excluded content types' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/page')
           .to_return(status: 200, body: '<html></html>', headers: { 'Content-Type' => 'text/html' })
 
@@ -94,7 +94,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'handles network errors gracefully' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/error')
           .to_raise(SocketError.new('Connection failed'))
 
@@ -106,7 +106,7 @@ describe 'HTTParty Patch' do
     end
 
     it 'prevents infinite recursion' do
-      OutboundHttpLogger.with_configuration(enabled: true) do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
         stub_request(:get, 'https://api.example.com/test')
           .to_return(status: 200, body: 'OK')
 
@@ -116,7 +116,7 @@ describe 'HTTParty Patch' do
           _(response.code).must_equal 200
         end
 
-        logs = OutboundHttpLogger::Models::OutboundRequestLog.where(url: 'https://api.example.com/test')
+        logs = OutboundHTTPLogger::Models::OutboundRequestLog.where(url: 'https://api.example.com/test')
 
         _(logs.count).must_equal 6 # HTTParty uses Net::HTTP, so each request is logged twice
       end
@@ -125,13 +125,13 @@ describe 'HTTParty Patch' do
 
   describe 'when logging is disabled' do
     before do
-      OutboundHttpLogger.disable!
+      OutboundHTTPLogger.disable!
     end
 
     after do
       # Reset to default state after disabling
-      OutboundHttpLogger.disable!
-      OutboundHttpLogger.clear_thread_data
+      OutboundHTTPLogger.disable!
+      OutboundHTTPLogger.clear_thread_data
     end
 
     it 'does not log requests when disabled' do

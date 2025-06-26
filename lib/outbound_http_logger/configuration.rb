@@ -3,7 +3,7 @@
 require 'logger'
 require 'stringio'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   class Configuration
     attr_accessor :enabled,
                   :excluded_urls,
@@ -145,7 +145,7 @@ module OutboundHttpLogger
 
       return unless current_depth >= @max_recursion_depth
 
-      error_msg = "OutboundHttpLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
+      error_msg = "OutboundHTTPLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
                   'This usually indicates that the HTTP library is being used within the logging process itself. ' \
                   'Check your logger configuration and database connection settings.'
 
@@ -159,7 +159,7 @@ module OutboundHttpLogger
         end
       end
 
-      raise OutboundHttpLogger::InfiniteRecursionError, error_msg
+      raise OutboundHTTPLogger::InfiniteRecursionError, error_msg
     end
 
     def increment_recursion_depth(library_name)

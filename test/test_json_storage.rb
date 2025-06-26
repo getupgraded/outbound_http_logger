@@ -3,14 +3,14 @@
 require 'test_helper'
 
 describe 'JSON Storage Behavior' do
-  let(:model) { OutboundHttpLogger::Models::OutboundRequestLog }
+  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   before do
     # Reset database adapter cache
-    OutboundHttpLogger::Models::OutboundRequestLog.reset_adapter_cache!
+    OutboundHTTPLogger::Models::OutboundRequestLog.reset_adapter_cache!
 
     # Reset global configuration to default state
-    config = OutboundHttpLogger.global_configuration
+    config = OutboundHTTPLogger.global_configuration
     config.enabled                = false
     config.excluded_urls          = [
       %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
@@ -50,18 +50,18 @@ describe 'JSON Storage Behavior' do
     config.logger                 = nil
 
     # Clear all logs
-    OutboundHttpLogger::Models::OutboundRequestLog.delete_all
+    OutboundHTTPLogger::Models::OutboundRequestLog.delete_all
 
     # Clear thread-local data
-    OutboundHttpLogger.clear_thread_data
+    OutboundHTTPLogger.clear_thread_data
   end
 
   after do
     # Disable logging
-    OutboundHttpLogger.disable!
+    OutboundHTTPLogger.disable!
 
     # Clear thread-local data
-    OutboundHttpLogger.clear_thread_data
+    OutboundHTTPLogger.clear_thread_data
   end
 
   describe 'SQLite adapter' do

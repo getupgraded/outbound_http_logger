@@ -1,24 +1,24 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Concerns
     module OutboundLogging
       extend ActiveSupport::Concern
 
       # Set a loggable object for outbound requests in the current thread
       def set_outbound_log_loggable(object)
-        OutboundHttpLogger.set_loggable(object)
+        OutboundHTTPLogger.set_loggable(object)
       end
 
       # Add custom metadata to outbound requests in the current thread
       def add_outbound_log_metadata(metadata)
         current_metadata = Thread.current[:outbound_http_logger_metadata] || {}
-        OutboundHttpLogger.set_metadata(current_metadata.merge(metadata))
+        OutboundHTTPLogger.set_metadata(current_metadata.merge(metadata))
       end
 
       # Clear outbound logging thread data
       def clear_outbound_log_data
-        OutboundHttpLogger.clear_thread_data
+        OutboundHTTPLogger.clear_thread_data
       end
 
       # Execute a block with specific loggable and metadata for outbound requests
@@ -28,8 +28,8 @@ module OutboundHttpLogger
         original_metadata = Thread.current[:outbound_http_logger_metadata]
 
         # Set new values
-        OutboundHttpLogger.set_loggable(loggable) if loggable
-        OutboundHttpLogger.set_metadata(metadata) if metadata.any?
+        OutboundHTTPLogger.set_loggable(loggable) if loggable
+        OutboundHTTPLogger.set_metadata(metadata) if metadata.any?
 
         yield
       ensure

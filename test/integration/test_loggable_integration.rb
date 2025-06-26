@@ -5,25 +5,25 @@ require 'test_helper'
 describe 'Loggable Integration Tests' do
   include TestHelpers
 
-  let(:model) { OutboundHttpLogger::Models::OutboundRequestLog }
+  let(:model) { OutboundHTTPLogger::Models::OutboundRequestLog }
 
   describe 'thread-local data integration' do
     it 'stores and retrieves loggable and metadata' do
       with_logging_enabled do
         # Test setting loggable
         mock_user = Object.new
-        OutboundHttpLogger.set_loggable(mock_user)
+        OutboundHTTPLogger.set_loggable(mock_user)
 
         _(Thread.current[:outbound_http_logger_loggable]).must_equal mock_user
 
         # Test setting metadata
         metadata = { action: 'test', user_id: 123 }
-        OutboundHttpLogger.set_metadata(metadata)
+        OutboundHTTPLogger.set_metadata(metadata)
 
         _(Thread.current[:outbound_http_logger_metadata]).must_equal metadata
 
         # Test clearing data
-        OutboundHttpLogger.clear_thread_data
+        OutboundHTTPLogger.clear_thread_data
 
         _(Thread.current[:outbound_http_logger_loggable]).must_be_nil
         _(Thread.current[:outbound_http_logger_metadata]).must_be_nil
@@ -35,14 +35,14 @@ describe 'Loggable Integration Tests' do
         # Set initial values
         initial_user     = Object.new
         initial_metadata = { initial: true }
-        OutboundHttpLogger.set_loggable(initial_user)
-        OutboundHttpLogger.set_metadata(initial_metadata)
+        OutboundHTTPLogger.set_loggable(initial_user)
+        OutboundHTTPLogger.set_metadata(initial_metadata)
 
         # Use with_logging to temporarily change values
         temp_user     = Object.new
         temp_metadata = { temporary: true }
 
-        OutboundHttpLogger.with_logging(loggable: temp_user, metadata: temp_metadata) do
+        OutboundHTTPLogger.with_logging(loggable: temp_user, metadata: temp_metadata) do
           _(Thread.current[:outbound_http_logger_loggable]).must_equal temp_user
           _(Thread.current[:outbound_http_logger_metadata]).must_equal temp_metadata
         end
@@ -56,10 +56,10 @@ describe 'Loggable Integration Tests' do
 
   describe 'log_request with thread-local data' do
     it 'includes thread-local metadata in logs' do
-      OutboundHttpLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
+      OutboundHTTPLogger.with_configuration(enabled: true, logger: Logger.new(StringIO.new)) do
         # Set thread-local metadata (skip loggable for now due to ActiveRecord complexity)
         metadata = { action: 'api_call', source: 'test', user_id: 123 }
-        OutboundHttpLogger.set_metadata(metadata)
+        OutboundHTTPLogger.set_metadata(metadata)
 
         # Manually call log_request to test the functionality
         request_data = {

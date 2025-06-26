@@ -88,13 +88,13 @@ end
 module TestHelpers
   def setup
     # Reset configuration to defaults
-    OutboundHttpLogger.reset_configuration!
+    OutboundHTTPLogger.reset_configuration!
 
     # Reset patch application state
-    OutboundHttpLogger.reset_patches!
+    OutboundHTTPLogger.reset_patches!
 
     # Clear all logs
-    OutboundHttpLogger::Models::OutboundRequestLog.delete_all
+    OutboundHTTPLogger::Models::OutboundRequestLog.delete_all
 
     # Reset WebMock
     WebMock.reset!
@@ -117,10 +117,10 @@ module TestHelpers
     end
 
     # Disable logging (this modifies configuration, so check must be above)
-    OutboundHttpLogger.disable!
+    OutboundHTTPLogger.disable!
 
     # Clear thread-local data
-    OutboundHttpLogger.clear_all_thread_data
+    OutboundHTTPLogger.clear_all_thread_data
   end
 
   # Check for leftover thread-local data and raise descriptive errors
@@ -128,7 +128,7 @@ module TestHelpers
   def assert_no_leftover_thread_data!
     leftover_data = {}
 
-    # Check all known OutboundHttpLogger thread-local variables
+    # Check all known OutboundHTTPLogger thread-local variables
     thread_vars = {
       outbound_http_logger_config_override: Thread.current[:outbound_http_logger_config_override],
       outbound_http_logger_loggable: Thread.current[:outbound_http_logger_loggable],
@@ -164,7 +164,7 @@ module TestHelpers
 
       To fix this:
       1. Add proper cleanup in the test's teardown method
-      2. Use OutboundHttpLogger.clear_thread_data or clear specific variables
+      2. Use OutboundHTTPLogger.clear_thread_data or clear specific variables
       3. Ensure with_configuration blocks properly restore state
 
       This check helps maintain test isolation and prevents flaky tests.
@@ -174,8 +174,8 @@ module TestHelpers
   # Check if configuration has been changed from defaults
   # This helps identify tests that modify global configuration without cleanup
   def assert_configuration_unchanged!
-    current_config = OutboundHttpLogger.global_configuration
-    default_config = OutboundHttpLogger.create_fresh_configuration
+    current_config = OutboundHTTPLogger.global_configuration
+    default_config = OutboundHTTPLogger.create_fresh_configuration
 
     changes = []
 
@@ -204,7 +204,7 @@ module TestHelpers
 
       This indicates that a test modified global configuration without proper cleanup.
       Tests should either:
-      1. Use OutboundHttpLogger.with_configuration for temporary changes
+      1. Use OutboundHTTPLogger.with_configuration for temporary changes
       2. Restore configuration in their teardown method
       3. Use test helpers that automatically restore configuration
 
@@ -213,18 +213,18 @@ module TestHelpers
   end
 
   def with_logging_enabled
-    OutboundHttpLogger.configure do |config|
+    OutboundHTTPLogger.configure do |config|
       config.enabled = true
       # Set a test logger to avoid Rails.logger dependency
       config.logger = Logger.new(StringIO.new) unless config.logger
     end
     yield
   ensure
-    OutboundHttpLogger.disable!
+    OutboundHTTPLogger.disable!
   end
 
   def assert_request_logged(method, url, status_code = nil)
-    logs = OutboundHttpLogger::Models::OutboundRequestLog.where(
+    logs = OutboundHTTPLogger::Models::OutboundRequestLog.where(
       http_method: method.to_s.upcase,
       url: url
     )
@@ -236,7 +236,7 @@ module TestHelpers
   end
 
   def assert_no_request_logged(method = nil, url = nil)
-    scope = OutboundHttpLogger::Models::OutboundRequestLog.all
+    scope = OutboundHTTPLogger::Models::OutboundRequestLog.all
     scope = scope.where(http_method: method.to_s.upcase) if method
     scope = scope.where(url: url) if url
 
@@ -246,7 +246,7 @@ module TestHelpers
   # Thread-safe configuration override for simple attribute changes
   # This is the recommended method for parallel testing
   def with_thread_safe_configuration(**overrides, &)
-    OutboundHttpLogger.with_configuration(**overrides, &)
+    OutboundHTTPLogger.with_configuration(**overrides, &)
   end
 
   # New adapter-based test helpers
@@ -254,29 +254,29 @@ module TestHelpers
 
   # Setup test logging with adapter pattern (recommended)
   def setup_outbound_http_logger_test(database_url: nil, adapter: :sqlite)
-    OutboundHttpLogger::Test.configure(database_url: database_url, adapter: adapter)
-    OutboundHttpLogger::Test.enable!
-    OutboundHttpLogger::Test.clear_logs!
+    OutboundHTTPLogger::Test.configure(database_url: database_url, adapter: adapter)
+    OutboundHTTPLogger::Test.enable!
+    OutboundHTTPLogger::Test.clear_logs!
   end
 
   # Teardown test logging with adapter pattern
   def teardown_outbound_http_logger_test
-    OutboundHttpLogger::Test.reset!
+    OutboundHTTPLogger::Test.reset!
   end
 
   # Backup current configuration state
   def backup_outbound_http_logger_configuration
-    OutboundHttpLogger::Test.backup_configuration
+    OutboundHTTPLogger::Test.backup_configuration
   end
 
   # Restore configuration from backup
   def restore_outbound_http_logger_configuration(backup)
-    OutboundHttpLogger::Test.restore_configuration(backup)
+    OutboundHTTPLogger::Test.restore_configuration(backup)
   end
 
   # Execute a block with modified configuration, then restore original
   def with_outbound_http_logger_configuration(**, &)
-    OutboundHttpLogger::Test.with_configuration(**, &)
+    OutboundHTTPLogger::Test.with_configuration(**, &)
   end
 
   # Setup test with isolated configuration (recommended for most tests)
@@ -304,7 +304,7 @@ module TestHelpers
 
   # Assert that a request was logged using the adapter pattern
   def assert_outbound_request_logged_with_adapter(method, url, status: nil)
-    logs = OutboundHttpLogger::Test.all_logs.select do |log|
+    logs = OutboundHTTPLogger::Test.all_logs.select do |log|
       log.http_method == method.to_s.upcase && log.url == url && (status.nil? || log.status_code == status)
     end
 
@@ -315,9 +315,9 @@ module TestHelpers
   # Assert request count using the adapter pattern
   def assert_outbound_request_count_with_adapter(expected_count, criteria = {})
     actual_count = if criteria.empty?
-                     OutboundHttpLogger::Test.logs_count
+                     OutboundHTTPLogger::Test.logs_count
                    else
-                     OutboundHttpLogger::Test.logs_matching(criteria).count
+                     OutboundHTTPLogger::Test.logs_matching(criteria).count
                    end
 
     assert_equal expected_count, actual_count, "Expected #{expected_count} outbound requests, got #{actual_count}"
