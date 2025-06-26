@@ -51,9 +51,14 @@ The test suite includes:
 - Core functionality tests (`test/test_*.rb`)
 - Edge case and isolation tests
 
-**Excluded from main suite** (require special setup):
-- `test/test_database_adapters.rb` (requires Rails environment)
+**Run separately** (for optimal performance):
+- `test/test_database_adapters.rb` (run separately to avoid test utility thread conflicts)
 - `test/test_recursion_detection.rb` (requires Rails.logger)
+
+**Available test tasks**:
+- `rake test` - Main test suite with parallel execution
+- `rake test_database_adapters` - Database adapter tests (run separately)
+- `rake test_all` - Combined task that runs both test suites
 
 ## GitHub Actions Workflow
 
