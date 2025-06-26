@@ -4,7 +4,7 @@
 
 ### Code Quality Improvements
 - ✅ Extract common patch behavior into shared module to eliminate duplication across Net::HTTP, Faraday, and HTTParty patches
-- Replace magic numbers with named constants for better maintainability
+- ✅ Replace magic numbers with named constants for better maintainability (max_body_size, max_recursion_depth, connection pool settings)
 - Refactor URL filtering logic into focused, separate methods
 - Standardize error handling patterns across the codebase
 

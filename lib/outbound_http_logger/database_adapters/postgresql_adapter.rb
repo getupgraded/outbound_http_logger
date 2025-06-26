@@ -53,8 +53,8 @@ module OutboundHTTPLogger
             'database' => uri.path[1..], # Remove leading slash
             'username' => uri.user,
             'password' => uri.password,
-            'pool' => 5,
-            'timeout' => 5000,
+            'pool' => OutboundHTTPLogger::Configuration::DEFAULT_CONNECTION_POOL_SIZE,
+            'timeout' => OutboundHTTPLogger::Configuration::DEFAULT_CONNECTION_TIMEOUT,
             'encoding' => 'unicode'
           }.compact
         end

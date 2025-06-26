@@ -5,6 +5,13 @@ require 'stringio'
 
 module OutboundHTTPLogger
   class Configuration
+    # Default configuration constants
+    DEFAULT_MAX_BODY_SIZE = 10_000 # 10KB - Maximum size for request/response bodies
+    DEFAULT_MAX_RECURSION_DEPTH = 3 # Maximum allowed recursion depth before raising error
+    DEFAULT_CONNECTION_POOL_SIZE = 5 # Default database connection pool size
+    DEFAULT_CONNECTION_TIMEOUT = 5000 # Default database connection timeout in milliseconds
+    DEFAULT_LOG_FETCH_LIMIT = 1000 # Default limit for fetching logs to prevent memory issues
+
     attr_accessor :enabled,
                   :excluded_urls,
                   :excluded_content_types,
@@ -54,7 +61,7 @@ module OutboundHTTPLogger
         credential
         private
       ]
-      @max_body_size          = 10_000 # 10KB
+      @max_body_size          = DEFAULT_MAX_BODY_SIZE
       @debug_logging          = false
       @logger                 = nil
 
@@ -63,7 +70,7 @@ module OutboundHTTPLogger
       @secondary_database_adapter = :sqlite
 
       # Recursion detection configuration
-      @max_recursion_depth = 3 # Maximum allowed recursion depth before raising error
+      @max_recursion_depth = DEFAULT_MAX_RECURSION_DEPTH
       @strict_recursion_detection = false # Whether to raise errors on recursion detection
     end
 

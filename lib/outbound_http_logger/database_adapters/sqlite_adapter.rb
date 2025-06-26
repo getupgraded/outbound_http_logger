@@ -31,8 +31,8 @@ module OutboundHTTPLogger
         config = {
           'adapter' => 'sqlite3',
           'database' => db_path,
-          'pool' => 5,
-          'timeout' => 5000
+          'pool' => OutboundHTTPLogger::Configuration::DEFAULT_CONNECTION_POOL_SIZE,
+          'timeout' => OutboundHTTPLogger::Configuration::DEFAULT_CONNECTION_TIMEOUT
         }
 
         # Add to Rails configurations and establish connection

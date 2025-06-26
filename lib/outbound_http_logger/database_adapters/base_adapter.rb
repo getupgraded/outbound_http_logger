@@ -78,7 +78,7 @@ module OutboundHTTPLogger
 
         begin
           ensure_connection_and_table
-          model_class.order(created_at: :desc).limit(1000) # Reasonable limit
+          model_class.order(created_at: :desc).limit(OutboundHTTPLogger::Configuration::DEFAULT_LOG_FETCH_LIMIT)
         rescue StandardError => e
           OutboundHTTPLogger.configuration.get_logger&.error("Error fetching logs from #{adapter_name}: #{e.class}: #{e.message}")
           []
