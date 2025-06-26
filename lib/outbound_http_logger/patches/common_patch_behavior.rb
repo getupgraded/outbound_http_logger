@@ -37,7 +37,7 @@ module OutboundHTTPLogger
 
         # Check if a library is available and accessible
         def library_available?(library_constant)
-          defined?(library_constant) && library_constant.is_a?(Class)
+          defined?(library_constant) && (library_constant.is_a?(Class) || library_constant.is_a?(Module))
         rescue StandardError
           false
         end
@@ -110,8 +110,8 @@ module OutboundHTTPLogger
         config.increment_recursion_depth(library_name)
 
         begin
-          # Capture request data
-          request_data = build_request_data(request_data_proc.call)
+          # Capture request data and include library name in metadata
+          request_data = build_request_data(request_data_proc.call, library_name)
 
           # Measure timing and make the request
           start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -128,7 +128,7 @@ module OutboundHTTPLogger
         rescue StandardError => e
           # Log failed requests
           end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          log_failed_request(method, url, request_data_proc.call, e, start_time, end_time)
+          log_failed_request(method, url, request_data_proc.call, e, start_time, end_time, library_name)
           raise e
         ensure
           config.decrement_recursion_depth(library_name)
@@ -138,10 +138,14 @@ module OutboundHTTPLogger
       private
 
         # Build standardized request data hash with thread-local context
-        def build_request_data(library_specific_data)
+        def build_request_data(library_specific_data, library_name = nil)
+          # Merge thread-local metadata with library name
+          thread_metadata = Thread.current[:outbound_http_logger_metadata] || {}
+          merged_metadata = library_name ? thread_metadata.merge(library: library_name) : thread_metadata
+
           library_specific_data.merge(
             loggable: Thread.current[:outbound_http_logger_loggable],
-            metadata: Thread.current[:outbound_http_logger_metadata]
+            metadata: merged_metadata
           )
         end
 
@@ -164,10 +168,10 @@ module OutboundHTTPLogger
         end
 
         # Log failed HTTP request with standardized error handling
-        def log_failed_request(method, url, library_specific_data, error, start_time, end_time)
+        def log_failed_request(method, url, library_specific_data, error, start_time, end_time, library_name = nil)
           OutboundHTTPLogger::ErrorHandling.handle_logging_error('log failed request') do
             duration_seconds = end_time - start_time
-            request_data = build_request_data(library_specific_data)
+            request_data = build_request_data(library_specific_data, library_name)
 
             response_data = {
               status_code: 0,
