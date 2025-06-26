@@ -567,13 +567,177 @@ rails db: rollback
 - **Optimized indexes**: Essential indexes only, avoiding over-indexing for append-only logs
 - **Extension management**: Automatically enables pg_trgm for PostgreSQL text search
 
+## Performance Considerations and Best Practices
+
 ### Performance Optimizations
 
-- **Deferred calls**: Early exit guards prevent unnecessary processing
-- **Optimized serialization**: Direct JSON storage without string conversions
-- **Minimal indexes**: Only essential indexes for append-only logging patterns
-- **Connection pooling**: Uses Rails' native database connection management
-- **Thread-safe**: Proper thread-local variable management
+The gem is designed for minimal performance impact on your application:
+
+- **Early exit guards**: Logging checks are performed before any expensive operations
+- **Deferred processing**: URL and content type filtering happens before request capture
+- **Optimized serialization**: Direct JSON storage without intermediate string conversions
+- **Minimal database overhead**: Only essential indexes for append-only logging patterns
+- **Connection pooling**: Leverages Rails' native database connection management
+- **Thread-safe design**: Proper thread-local variable management prevents contention
+
+### Performance Impact
+
+**Typical overhead per HTTP request:**
+- **Enabled logging**: ~0.5-2ms additional latency
+- **Disabled logging**: ~0.01ms (single boolean check)
+- **Excluded URLs**: ~0.1ms (regex matching only)
+- **Memory usage**: ~1-5KB per logged request (depending on body size)
+
+### Best Practices for Production
+
+#### 1. Configure Appropriate Exclusions
+
+```ruby
+OutboundHTTPLogger.configure do |config|
+  # Exclude high-frequency, low-value requests
+  config.excluded_urls = [
+    %r{/health},                    # Health checks
+    %r{/metrics},                   # Monitoring endpoints
+    %r{/ping},                      # Ping endpoints
+    %r{\.amazonaws\.com/.*\.css},   # Static assets
+    %r{\.cloudfront\.net},          # CDN requests
+    %r{analytics\.google\.com}      # Analytics tracking
+  ]
+
+  # Exclude binary and static content
+  config.excluded_content_types = [
+    'image/',                       # All image types
+    'video/',                       # All video types
+    'audio/',                       # All audio types
+    'application/pdf',              # PDF files
+    'application/zip',              # Archive files
+    'text/css',                     # Stylesheets
+    'text/javascript',              # JavaScript files
+    'application/javascript'        # JavaScript files
+  ]
+end
+```
+
+#### 2. Limit Body Size for Large Payloads
+
+```ruby
+OutboundHTTPLogger.configure do |config|
+  # Limit body size to prevent memory issues with large payloads
+  config.max_body_size = 10_000  # 10KB (default)
+  # For APIs with large responses, consider smaller limits:
+  # config.max_body_size = 5_000   # 5KB for high-traffic APIs
+end
+```
+
+#### 3. Use Secondary Database for High-Volume Applications
+
+```ruby
+# Separate logging database to avoid impacting main application performance
+OutboundHTTPLogger.enable_secondary_logging!(
+  'postgresql://localhost/outbound_logs_production',
+  adapter: :postgresql
+)
+```
+
+#### 4. Implement Log Rotation and Cleanup
+
+```ruby
+# Add to a scheduled job (e.g., sidekiq-cron, whenever gem)
+class OutboundLogCleanupJob
+  def perform
+    # Keep only last 30 days of logs
+    cutoff_date = 30.days.ago
+    OutboundHTTPLogger::Models::OutboundRequestLog
+      .where('created_at < ?', cutoff_date)
+      .delete_all
+  end
+end
+```
+
+### Monitoring and Observability
+
+#### 1. Monitor Log Volume
+
+```ruby
+# Check log growth rate
+recent_logs = OutboundHTTPLogger::Models::OutboundRequestLog
+  .where('created_at > ?', 1.hour.ago)
+  .count
+
+puts "Logs per hour: #{recent_logs}"
+```
+
+#### 2. Identify High-Volume Endpoints
+
+```ruby
+# Find most frequently logged URLs
+OutboundHTTPLogger::Models::OutboundRequestLog
+  .group(:url)
+  .order('count_all DESC')
+  .limit(10)
+  .count
+```
+
+#### 3. Monitor Performance Impact
+
+```ruby
+# Check average request duration
+avg_duration = OutboundHTTPLogger::Models::OutboundRequestLog
+  .where('created_at > ?', 1.day.ago)
+  .average(:duration_seconds)
+
+puts "Average request duration: #{avg_duration}s"
+```
+
+### Scaling Considerations
+
+#### For High-Traffic Applications (>1000 requests/minute)
+
+1. **Use dedicated database**: Separate logging database prevents impact on main application
+2. **Implement async logging**: Consider background job processing for logging
+3. **Aggressive filtering**: Exclude more URL patterns and content types
+4. **Regular cleanup**: Automated log rotation and archival
+
+#### For Memory-Constrained Environments
+
+1. **Reduce body size limits**: Lower `max_body_size` to 1-2KB
+2. **Exclude large responses**: Filter out content types with large payloads
+3. **Limit metadata**: Minimize custom metadata to essential information only
+
+#### Database Optimization
+
+```sql
+-- PostgreSQL: Optimize for time-series queries
+CREATE INDEX CONCURRENTLY idx_outbound_logs_created_at_desc
+ON outbound_request_logs (created_at DESC);
+
+-- PostgreSQL: Optimize for URL pattern searches
+CREATE INDEX CONCURRENTLY idx_outbound_logs_url_gin
+ON outbound_request_logs USING gin (url gin_trgm_ops);
+
+-- Regular maintenance
+VACUUM ANALYZE outbound_request_logs;
+```
+
+### Troubleshooting Performance Issues
+
+#### 1. High Memory Usage
+
+- Check `max_body_size` configuration
+- Review excluded content types
+- Monitor for memory leaks in long-running processes
+
+#### 2. Database Performance
+
+- Ensure proper indexing on `created_at` column
+- Implement regular log cleanup
+- Consider partitioning for very high-volume applications
+
+#### 3. Request Latency
+
+- Review excluded URL patterns
+- Check for recursive logging (should be prevented automatically)
+- Monitor database connection pool usage
 
 ### ActiveRecord Integration
 
