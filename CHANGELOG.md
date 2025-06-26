@@ -16,6 +16,7 @@
 
 ### Testing Improvements
 - ✅ Add comprehensive edge case testing for concurrent access and extreme inputs
+- 🔄 Fix test isolation issues for parallel execution (in progress)
 - Fix test isolation issues to allow running full test suite together
 - Add integration tests for Rails features (generator, rake tasks, railtie)
 - Include database adapter tests in main CI suite
