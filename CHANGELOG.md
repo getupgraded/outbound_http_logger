@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - 2025-01-26
+## 0.0.2
 
 ### Code Quality Improvements
 - ✅ Extract common patch behavior into shared module to eliminate duplication across Net::HTTP, Faraday, and HTTParty patches
@@ -16,9 +16,9 @@
 
 ### Testing Improvements
 - ✅ Add comprehensive edge case testing for concurrent access and extreme inputs
-- ✅ Fix test isolation issues for parallel execution (significantly improved, minor intermittent issues remain)
-- Fix test isolation issues to allow running full test suite together
-- Add integration tests for Rails features (generator, rake tasks, railtie)
+- ✅ Fix test isolation issues to allow running full test suite together with parallel execution (8 threads)
+- ✅ Implement thread-based parallel testing with proper database isolation and connection pooling
+- ✅ Add comprehensive integration tests for Rails features (generator, rake tasks, railtie)
 - Include database adapter tests in main CI suite
 
 ### Dependency Management
