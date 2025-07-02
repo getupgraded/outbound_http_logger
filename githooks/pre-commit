@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+# Load RVM environment
+if [[ -s "$HOME/.rvm/scripts/rvm" ]]; then
+  source "$HOME/.rvm/scripts/rvm"
+elif [[ -s "/usr/local/rvm/scripts/rvm" ]]; then
+  source "/usr/local/rvm/scripts/rvm"
+fi
+
+# Navigate to repo root
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# Run rubocop before committing
+bundle exec rubocop --config ./.rubocop.yml
+status=$?
+if [ $status -ne 0 ]; then
+  echo "RuboCop found issues. Commit aborted." >&2
+  exit $status
+fi

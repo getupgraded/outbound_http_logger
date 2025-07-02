@@ -3,7 +3,7 @@
 require 'rails/generators'
 require 'rails/generators/active_record'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   module Generators
     class MigrationGenerator < Rails::Generators::Base
       include ActiveRecord::Generators::Migration
