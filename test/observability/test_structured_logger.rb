@@ -2,7 +2,9 @@
 
 require 'test_helper'
 
-class TestStructuredLogger < Minitest::Test
+class TestStructuredLogger < ActiveSupport::TestCase
+  # Disable parallelization for observability tests due to singleton state
+  parallelize(workers: 0)
   def setup
     @config = OutboundHTTPLogger::Configuration.new
     @config.structured_logging_enabled = true

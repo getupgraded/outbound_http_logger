@@ -2,7 +2,9 @@
 
 require 'test_helper'
 
-class TestMetricsCollector < Minitest::Test
+class TestMetricsCollector < ActiveSupport::TestCase
+  # Disable parallelization for observability tests due to singleton state
+  parallelize(workers: 0)
   def setup
     @config = OutboundHTTPLogger::Configuration.new
     @config.metrics_collection_enabled = true
@@ -74,7 +76,8 @@ class TestMetricsCollector < Minitest::Test
     snapshot = @collector.snapshot
 
     # Check error counter
-    assert_equal 1, snapshot[:counters]['http_request_errors_total{domain:api.example.com,error_class:StandardError,method:POST}']
+    assert_equal 1,
+                 snapshot[:counters]['http_request_errors_total{domain:api.example.com,error_class:StandardError,method:POST}']
 
     # Check status category
     assert_equal 1, snapshot[:counters]['http_requests_by_status_category{category:5xx,domain:api.example.com}']

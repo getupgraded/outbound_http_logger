@@ -283,7 +283,11 @@ module OutboundHTTPLogger
                    end
 
           # Ensure we have a clean logger for structured output
-          logger.formatter = proc { |_severity, _datetime, _progname, msg| "#{msg}\n" } if logger.respond_to?(:formatter=)
+          if logger.respond_to?(:formatter=)
+            logger.formatter = proc { |_severity, _datetime, _progname, msg|
+              "#{msg}\n"
+            }
+          end
           logger
         end
     end

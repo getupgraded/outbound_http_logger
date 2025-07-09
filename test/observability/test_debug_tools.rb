@@ -2,7 +2,9 @@
 
 require 'test_helper'
 
-class TestDebugTools < Minitest::Test
+class TestDebugTools < ActiveSupport::TestCase
+  # Disable parallelization for observability tests due to singleton state
+  parallelize(workers: 0)
   def setup
     @config = OutboundHTTPLogger::Configuration.new
     @config.debug_tools_enabled = true

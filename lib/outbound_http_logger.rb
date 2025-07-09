@@ -114,7 +114,8 @@ module OutboundHTTPLogger
     # @return [Observability] The observability module for structured logging, metrics, and debugging
     def observability
       @observability ||= begin
-        Observability.initialize!(configuration)
+        # Only initialize if not already initialized or if configuration has changed
+        Observability.initialize!(configuration) if !Observability.configuration || Observability.configuration != configuration
         Observability
       end
     end
@@ -247,6 +248,104 @@ module OutboundHTTPLogger
       Patches::HTTPartyPatch.reset!
     end
 
+    # Get status of all patches
+    # @return [Hash] Hash with patch names as keys and status info as values
+    def patch_status
+      {
+        'Net::HTTP' => {
+          enabled: configuration.net_http_patch_enabled?,
+          applied: Patches::NetHTTPPatch.applied?,
+          library_available: defined?(Net::HTTP),
+          active: configuration.enabled? && configuration.net_http_patch_enabled? && Patches::NetHTTPPatch.applied?
+        },
+        'Faraday' => {
+          enabled: configuration.faraday_patch_enabled?,
+          applied: Patches::FaradayPatch.applied?,
+          library_available: defined?(Faraday),
+          active: configuration.enabled? && configuration.faraday_patch_enabled? && Patches::FaradayPatch.applied?
+        },
+        'HTTParty' => {
+          enabled: configuration.httparty_patch_enabled?,
+          applied: Patches::HTTPartyPatch.applied?,
+          library_available: defined?(HTTParty),
+          active: configuration.enabled? && configuration.httparty_patch_enabled? && Patches::HTTPartyPatch.applied?
+        }
+      }
+    end
+
+    # Get list of available patches
+    # @return [Array<String>] List of supported patch names
+    def available_patches
+      %w[Net::HTTP Faraday HTTParty]
+    end
+
+    # Get list of currently applied patches
+    # @return [Array<String>] List of applied patch names
+    def applied_patches
+      patches = []
+      patches << 'Net::HTTP' if Patches::NetHTTPPatch.applied?
+      patches << 'Faraday' if Patches::FaradayPatch.applied?
+      patches << 'HTTParty' if Patches::HTTPartyPatch.applied?
+      patches
+    end
+
+    # Get list of currently active patches (applied and enabled)
+    # @return [Array<String>] List of active patch names
+    def active_patches
+      return [] unless configuration.enabled?
+
+      patches = []
+      patches << 'Net::HTTP' if configuration.net_http_patch_enabled? && Patches::NetHTTPPatch.applied?
+      patches << 'Faraday' if configuration.faraday_patch_enabled? && Patches::FaradayPatch.applied?
+      patches << 'HTTParty' if configuration.httparty_patch_enabled? && Patches::HTTPartyPatch.applied?
+      patches
+    end
+
+    # Enable a specific patch
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @return [Boolean] true if patch was enabled, false if invalid library name
+    def enable_patch(library_name) # rubocop:disable Naming/PredicateMethod
+      case library_name.to_s.downcase
+      when 'net_http', 'net::http'
+        configuration.net_http_patch_enabled = true
+        apply_patch_if_needed('Net::HTTP', -> { Patches::NetHTTPPatch.apply! }, -> { defined?(Net::HTTP) })
+        true
+      when 'faraday'
+        configuration.faraday_patch_enabled = true
+        apply_patch_if_needed('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
+        true
+      when 'httparty'
+        configuration.httparty_patch_enabled = true
+        apply_patch_if_needed('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
+        true
+      else
+        false
+      end
+    end
+
+    # Disable a specific patch
+    # Note: This only prevents the patch from being active, it cannot unapply already applied patches
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @return [Boolean] true if patch was disabled, false if invalid library name
+    def disable_patch(library_name) # rubocop:disable Naming/PredicateMethod
+      case library_name.to_s.downcase
+      when 'net_http', 'net::http'
+        configuration.net_http_patch_enabled = false
+        log_patch_disabled('Net::HTTP')
+        true
+      when 'faraday'
+        configuration.faraday_patch_enabled = false
+        log_patch_disabled('Faraday')
+        true
+      when 'httparty'
+        configuration.httparty_patch_enabled = false
+        log_patch_disabled('HTTParty')
+        true
+      else
+        false
+      end
+    end
+
     # Get information about available HTTP libraries
     # @return [Hash] Hash with library names as keys and availability status as values
     def library_status
@@ -282,9 +381,24 @@ module OutboundHTTPLogger
       def setup_patches
         return unless configuration.enabled?
 
-        apply_patch_with_fallback('Net::HTTP', -> { Patches::NetHTTPPatch.apply! }, -> { defined?(Net::HTTP) })
-        apply_patch_with_fallback('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
-        apply_patch_with_fallback('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
+        # Apply patches selectively based on configuration
+        if configuration.net_http_patch_enabled?
+          apply_patch_with_fallback('Net::HTTP', -> { Patches::NetHTTPPatch.apply! }, -> { defined?(Net::HTTP) })
+        else
+          log_patch_skipped('Net::HTTP', 'disabled in configuration')
+        end
+
+        if configuration.faraday_patch_enabled?
+          apply_patch_with_fallback('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
+        else
+          log_patch_skipped('Faraday', 'disabled in configuration')
+        end
+
+        if configuration.httparty_patch_enabled?
+          apply_patch_with_fallback('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
+        else
+          log_patch_skipped('HTTParty', 'disabled in configuration')
+        end
       end
 
       # Apply a patch with graceful error handling and logging
@@ -416,6 +530,28 @@ module OutboundHTTPLogger
       # Apply patches immediately when libraries are available
       def apply_patches_if_needed
         setup_patches if configuration.enabled?
+      end
+
+      # Apply a single patch if needed (used by enable_patch)
+      def apply_patch_if_needed(library_name, apply_proc, available_proc)
+        return unless configuration.enabled?
+
+        apply_patch_with_fallback(library_name, apply_proc, available_proc)
+      end
+
+      # Log when a patch is skipped
+      def log_patch_skipped(library_name, reason)
+        return unless configuration.debug_logging && configuration.logger
+
+        configuration.logger.debug("OutboundHTTPLogger: #{library_name} patch skipped - #{reason}")
+      end
+
+      # Log when a patch is disabled
+      def log_patch_disabled(library_name)
+        return unless configuration.debug_logging && configuration.logger
+
+        configuration.logger.info("OutboundHTTPLogger: #{library_name} patch disabled - " \
+                                  'already applied patches will remain inactive until restart')
       end
   end
 end

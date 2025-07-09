@@ -17,6 +17,20 @@ Rake::TestTask.new(:test) do |t|
   t.verbose = true
 end
 
+# Separate task for faster feedback during development
+Rake::TestTask.new(:test_fast) do |t|
+  t.libs << 'test'
+  t.libs << 'lib'
+  # Run core tests only for faster feedback
+  t.test_files = FileList['test/**/*test*.rb'].exclude(
+    'test/test_helper.rb', # Helper file, not a test
+    'test/test_database_adapters.rb', # Slower database tests
+    'test/test_recursion_detection.rb', # Requires Rails.logger
+    'test/integration/**/*test*.rb' # Integration tests
+  )
+  t.verbose = true
+end
+
 # Database adapter tests - run separately due to test utility thread safety
 Rake::TestTask.new(:test_database_adapters) do |t|
   t.libs << 'test'

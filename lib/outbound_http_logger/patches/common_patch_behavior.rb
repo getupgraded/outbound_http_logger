@@ -97,6 +97,9 @@ module OutboundHTTPLogger
         # Early exit if logging is disabled
         return super_proc.call unless config.enabled?
 
+        # Early exit if this specific patch is disabled
+        return super_proc.call unless patch_enabled_for_library?(library_name, config)
+
         # Check for recursion and prevent infinite loops
         if config.in_recursion?(library_name)
           config.check_recursion_depth!(library_name) if config.strict_recursion_detection
@@ -136,6 +139,23 @@ module OutboundHTTPLogger
       end
 
       private
+
+        # Check if patch is enabled for a specific library
+        # @param library_name [String] Library name (e.g., 'net_http', 'faraday', 'httparty')
+        # @param config [Configuration] Configuration instance
+        # @return [Boolean] true if patch is enabled for this library
+        def patch_enabled_for_library?(library_name, config)
+          case library_name.to_s.downcase
+          when 'net_http'
+            config.net_http_patch_enabled?
+          when 'faraday'
+            config.faraday_patch_enabled?
+          when 'httparty'
+            config.httparty_patch_enabled?
+          else
+            false
+          end
+        end
 
         # Build standardized request data hash with thread-local context
         def build_request_data(library_specific_data, library_name = nil)

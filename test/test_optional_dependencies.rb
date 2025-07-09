@@ -108,14 +108,12 @@ describe 'Optional Dependencies Handling' do
       log_output = StringIO.new
       logger = Logger.new(log_output)
 
-      OutboundHTTPLogger.configure do |config|
-        config.debug_logging = true
-        config.logger = logger
+      # Use with_configuration to ensure automatic cleanup
+      OutboundHTTPLogger.with_configuration(debug_logging: true, logger: logger) do
+        # Reset and enable logging to trigger patch application
+        OutboundHTTPLogger.reset_patches!
+        OutboundHTTPLogger.enable!
       end
-
-      # Reset and enable logging to trigger patch application
-      OutboundHTTPLogger.reset_patches!
-      OutboundHTTPLogger.enable!
 
       log_content = log_output.string
 

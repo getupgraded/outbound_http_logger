@@ -30,7 +30,11 @@ module OutboundHTTPLogger
                   :structured_logging_level,
                   :metrics_collection_enabled,
                   :debug_tools_enabled,
-                  :performance_logging_threshold
+                  :performance_logging_threshold,
+                  :net_http_patch_enabled,
+                  :faraday_patch_enabled,
+                  :httparty_patch_enabled,
+                  :auto_patch_detection
 
     def initialize
       @mutex                  = Mutex.new
@@ -88,6 +92,12 @@ module OutboundHTTPLogger
       @metrics_collection_enabled = false
       @debug_tools_enabled = false
       @performance_logging_threshold = 1.0 # Log operations slower than 1 second
+
+      # Patch control configuration
+      @net_http_patch_enabled = true # Enable Net::HTTP patching by default
+      @faraday_patch_enabled = true # Enable Faraday patching by default
+      @httparty_patch_enabled = true # Enable HTTParty patching by default
+      @auto_patch_detection = true # Automatically apply patches when libraries are detected
     end
 
     # Check if logging is enabled
@@ -211,6 +221,48 @@ module OutboundHTTPLogger
     # @return [Boolean] true if debug tools are enabled
     def debug_tools_enabled?
       @debug_tools_enabled == true
+    end
+
+    # Patch control configuration methods
+
+    # Check if Net::HTTP patch is enabled
+    # @return [Boolean] true if Net::HTTP patch is enabled
+    def net_http_patch_enabled?
+      @net_http_patch_enabled == true
+    end
+
+    # Check if Faraday patch is enabled
+    # @return [Boolean] true if Faraday patch is enabled
+    def faraday_patch_enabled?
+      @faraday_patch_enabled == true
+    end
+
+    # Check if HTTParty patch is enabled
+    # @return [Boolean] true if HTTParty patch is enabled
+    def httparty_patch_enabled?
+      @httparty_patch_enabled == true
+    end
+
+    # Check if automatic patch detection is enabled
+    # @return [Boolean] true if auto patch detection is enabled
+    def auto_patch_detection?
+      @auto_patch_detection == true
+    end
+
+    # Check if a specific patch is enabled by library name
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @return [Boolean] true if the patch is enabled
+    def patch_enabled?(library_name)
+      case library_name.to_s.downcase
+      when 'net_http', 'net::http'
+        net_http_patch_enabled?
+      when 'faraday'
+        faraday_patch_enabled?
+      when 'httparty'
+        httparty_patch_enabled?
+      else
+        false
+      end
     end
 
     # Recursion detection and prevention
@@ -354,7 +406,11 @@ module OutboundHTTPLogger
           structured_logging_level: @structured_logging_level,
           metrics_collection_enabled: @metrics_collection_enabled,
           debug_tools_enabled: @debug_tools_enabled,
-          performance_logging_threshold: @performance_logging_threshold
+          performance_logging_threshold: @performance_logging_threshold,
+          net_http_patch_enabled: @net_http_patch_enabled,
+          faraday_patch_enabled: @faraday_patch_enabled,
+          httparty_patch_enabled: @httparty_patch_enabled,
+          auto_patch_detection: @auto_patch_detection
         }
       end
     end
@@ -381,6 +437,10 @@ module OutboundHTTPLogger
         @metrics_collection_enabled = backup[:metrics_collection_enabled] if backup.key?(:metrics_collection_enabled)
         @debug_tools_enabled = backup[:debug_tools_enabled] if backup.key?(:debug_tools_enabled)
         @performance_logging_threshold = backup[:performance_logging_threshold] if backup.key?(:performance_logging_threshold)
+        @net_http_patch_enabled = backup[:net_http_patch_enabled] if backup.key?(:net_http_patch_enabled)
+        @faraday_patch_enabled = backup[:faraday_patch_enabled] if backup.key?(:faraday_patch_enabled)
+        @httparty_patch_enabled = backup[:httparty_patch_enabled] if backup.key?(:httparty_patch_enabled)
+        @auto_patch_detection = backup[:auto_patch_detection] if backup.key?(:auto_patch_detection)
       end
     end
   end

@@ -46,7 +46,7 @@ module OutboundHTTPLogger
       # @param result [Hash] Final result data
       # @return [Hash, nil] Trace summary
       def end_trace(trace_id, result = {})
-        return nil unless enabled? || !trace_id
+        return nil unless enabled? && trace_id
 
         trace = nil
         duration = nil
