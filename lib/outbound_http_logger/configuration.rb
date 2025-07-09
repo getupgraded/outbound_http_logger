@@ -1,7 +1,17 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
+require 'logger'
+require 'stringio'
+
+module OutboundHTTPLogger
   class Configuration
+    # Default configuration constants
+    DEFAULT_MAX_BODY_SIZE = 10_000 # 10KB - Maximum size for request/response bodies
+    DEFAULT_MAX_RECURSION_DEPTH = 3 # Maximum allowed recursion depth before raising error
+    DEFAULT_CONNECTION_POOL_SIZE = 5 # Default database connection pool size
+    DEFAULT_CONNECTION_TIMEOUT = 5000 # Default database connection timeout in milliseconds
+    DEFAULT_LOG_FETCH_LIMIT = 1000 # Default limit for fetching logs to prevent memory issues
+
     attr_accessor :enabled,
                   :excluded_urls,
                   :excluded_content_types,
@@ -11,9 +21,23 @@ module OutboundHttpLogger
                   :debug_logging,
                   :logger,
                   :secondary_database_url,
-                  :secondary_database_adapter
+                  :secondary_database_adapter,
+                  :max_recursion_depth,
+                  :strict_recursion_detection,
+                  :observability_enabled,
+                  :structured_logging_enabled,
+                  :structured_logging_format,
+                  :structured_logging_level,
+                  :metrics_collection_enabled,
+                  :debug_tools_enabled,
+                  :performance_logging_threshold,
+                  :net_http_patch_enabled,
+                  :faraday_patch_enabled,
+                  :httparty_patch_enabled,
+                  :auto_patch_detection
 
     def initialize
+      @mutex                  = Mutex.new
       @enabled                = false
       @excluded_urls          = [
         %r{https://o\d+\.ingest\..*\.sentry\.io},  # Sentry URLs
@@ -30,46 +54,93 @@ module OutboundHttpLogger
         'audio/',
         'font/'
       ]
-      @sensitive_headers = [
-        'authorization',
-        'cookie',
-        'set-cookie',
-        'x-api-key',
-        'x-auth-token',
-        'x-access-token',
-        'bearer'
+      @sensitive_headers = %w[
+        authorization
+        cookie
+        set-cookie
+        x-api-key
+        x-auth-token
+        x-access-token
+        bearer
       ]
-      @sensitive_body_keys = [
-        'password',
-        'secret',
-        'token',
-        'key',
-        'auth',
-        'credential',
-        'private'
+      @sensitive_body_keys = %w[
+        password
+        secret
+        token
+        key
+        auth
+        credential
+        private
       ]
-      @max_body_size          = 10_000 # 10KB
+      @max_body_size          = DEFAULT_MAX_BODY_SIZE
       @debug_logging          = false
       @logger                 = nil
 
       # Secondary database configuration
       @secondary_database_url = nil
       @secondary_database_adapter = :sqlite
+
+      # Recursion detection configuration
+      @max_recursion_depth = DEFAULT_MAX_RECURSION_DEPTH
+      @strict_recursion_detection = false # Whether to raise errors on recursion detection
+
+      # Observability configuration
+      @observability_enabled = false
+      @structured_logging_enabled = false
+      @structured_logging_format = :json # :json or :key_value
+      @structured_logging_level = :info # :debug, :info, :warn, :error, :fatal
+      @metrics_collection_enabled = false
+      @debug_tools_enabled = false
+      @performance_logging_threshold = 1.0 # Log operations slower than 1 second
+
+      # Patch control configuration
+      @net_http_patch_enabled = true # Enable Net::HTTP patching by default
+      @faraday_patch_enabled = true # Enable Faraday patching by default
+      @httparty_patch_enabled = true # Enable HTTParty patching by default
+      @auto_patch_detection = true # Automatically apply patches when libraries are detected
     end
 
+    # Check if logging is enabled
+    # @return [Boolean] true if logging is enabled
     def enabled?
       @enabled == true
     end
 
+    # Determine if a URL should be logged based on configuration
+    # @param url [String] The URL to check
+    # @return [Boolean] true if the URL should be logged
     def should_log_url?(url)
-      return false unless enabled?
-      return false if url.nil? || url.empty?
+      return false unless logging_enabled_for_url?
+      return false unless valid_url?(url)
 
-      @excluded_urls.none? { |pattern| pattern.match?(url) }
+      !url_excluded?(url)
     end
 
+    # Check if logging is enabled for URL filtering
+    # @return [Boolean] true if logging is enabled
+    def logging_enabled_for_url?
+      enabled?
+    end
+
+    # Validate that URL is present and not blank
+    # @param url [String] The URL to validate
+    # @return [Boolean] true if URL is valid
+    def valid_url?(url)
+      url.present?
+    end
+
+    # Check if URL matches any exclusion patterns
+    # @param url [String] The URL to check against exclusion patterns
+    # @return [Boolean] true if URL should be excluded
+    def url_excluded?(url)
+      @excluded_urls.any? { |pattern| pattern.match?(url) }
+    end
+
+    # Determine if a content type should be logged
+    # @param content_type [String] The content type to check
+    # @return [Boolean] true if the content type should be logged
     def should_log_content_type?(content_type)
-      return true if content_type.nil? || content_type.empty?
+      return true if content_type.blank?
 
       # Handle both String and Array content types (Rails 7 compatibility)
       content_type_str = case content_type
@@ -87,7 +158,160 @@ module OutboundHttpLogger
     end
 
     def get_logger
-      @logger || (defined?(Rails) ? Rails.logger : nil)
+      return @logger if @logger
+
+      # Try Rails.logger if Rails is available and has a working logger
+      return Rails.logger if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
+
+      # Fallback to a default logger
+      @get_logger ||= create_fallback_logger
+    end
+
+    private
+
+      def create_fallback_logger
+        # In test environments, use a quiet logger unless debugging
+        if test_environment?
+          ::Logger.new(StringIO.new)
+        else
+          # In non-test environments, log to stderr for visibility
+          ::Logger.new($stderr)
+        end
+      end
+
+      def test_environment?
+        # Check various ways to detect test environment
+        (defined?(Rails) && Rails.env&.test?) ||
+          ENV['RACK_ENV'] == 'test' ||
+          ENV['RAILS_ENV'] == 'test' ||
+          ENV['RUBY_ENV'] == 'test' ||
+          # Check if we're running under common test frameworks
+          (defined?(Minitest) && $PROGRAM_NAME.include?('test')) ||
+          (defined?(RSpec) && $PROGRAM_NAME.include?('rspec')) ||
+          # Check if test gems are loaded
+          defined?(Minitest::Test) ||
+          defined?(RSpec::Core) ||
+          # Check command line patterns
+          ($PROGRAM_NAME.include?('rake') && ARGV.include?('test'))
+      end
+
+    public
+
+    # Observability configuration methods
+
+    # Check if observability features are enabled
+    # @return [Boolean] true if observability is enabled
+    def observability_enabled?
+      @observability_enabled == true
+    end
+
+    # Check if structured logging is enabled
+    # @return [Boolean] true if structured logging is enabled
+    def structured_logging_enabled?
+      @structured_logging_enabled == true
+    end
+
+    # Check if metrics collection is enabled
+    # @return [Boolean] true if metrics collection is enabled
+    def metrics_collection_enabled?
+      @metrics_collection_enabled == true
+    end
+
+    # Check if debug tools are enabled
+    # @return [Boolean] true if debug tools are enabled
+    def debug_tools_enabled?
+      @debug_tools_enabled == true
+    end
+
+    # Patch control configuration methods
+
+    # Check if Net::HTTP patch is enabled
+    # @return [Boolean] true if Net::HTTP patch is enabled
+    def net_http_patch_enabled?
+      @net_http_patch_enabled == true
+    end
+
+    # Check if Faraday patch is enabled
+    # @return [Boolean] true if Faraday patch is enabled
+    def faraday_patch_enabled?
+      @faraday_patch_enabled == true
+    end
+
+    # Check if HTTParty patch is enabled
+    # @return [Boolean] true if HTTParty patch is enabled
+    def httparty_patch_enabled?
+      @httparty_patch_enabled == true
+    end
+
+    # Check if automatic patch detection is enabled
+    # @return [Boolean] true if auto patch detection is enabled
+    def auto_patch_detection?
+      @auto_patch_detection == true
+    end
+
+    # Check if a specific patch is enabled by library name
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @return [Boolean] true if the patch is enabled
+    def patch_enabled?(library_name)
+      case library_name.to_s.downcase
+      when 'net_http', 'net::http'
+        net_http_patch_enabled?
+      when 'faraday'
+        faraday_patch_enabled?
+      when 'httparty'
+        httparty_patch_enabled?
+      else
+        false
+      end
+    end
+
+    # Recursion detection and prevention
+    def check_recursion_depth!(library_name)
+      return unless @strict_recursion_detection
+
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      current_depth = Thread.current[depth_key] || 0
+
+      return unless current_depth >= @max_recursion_depth
+
+      error_msg = "OutboundHTTPLogger: Infinite recursion detected in #{library_name} (depth: #{current_depth}). " \
+                  'This usually indicates that the HTTP library is being used within the logging process itself. ' \
+                  'Check your logger configuration and database connection settings.'
+
+      # Log the error if possible (but don't use HTTP logging!)
+      if get_logger && !Thread.current[:outbound_http_logger_logging_error]
+        Thread.current[:outbound_http_logger_logging_error] = true
+        begin
+          get_logger.error(error_msg)
+        ensure
+          Thread.current[:outbound_http_logger_logging_error] = false
+        end
+      end
+
+      raise OutboundHTTPLogger::InfiniteRecursionError, error_msg
+    end
+
+    def increment_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      Thread.current[depth_key] = (Thread.current[depth_key] || 0) + 1
+    end
+
+    def decrement_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      current_depth = Thread.current[depth_key] || 0
+      new_depth = [current_depth - 1, 0].max
+
+      # Set to nil when depth reaches 0 to indicate no active recursion tracking
+      Thread.current[depth_key] = new_depth.zero? ? nil : new_depth
+    end
+
+    def current_recursion_depth(library_name)
+      depth_key = :"outbound_http_logger_depth_#{library_name}"
+      Thread.current[depth_key] || 0
+    end
+
+    def in_recursion?(library_name)
+      current_recursion_depth(library_name).positive?
     end
 
     # Secondary database configuration
@@ -112,9 +336,7 @@ module OutboundHttpLogger
       filtered = headers.dup
       @sensitive_headers.each do |sensitive_header|
         filtered.each_key do |key|
-          if key.to_s.downcase == sensitive_header.downcase
-            filtered[key] = '[FILTERED]'
-          end
+          filtered[key] = '[FILTERED]' if key.to_s.downcase == sensitive_header.downcase
         end
       end
       filtered
@@ -148,9 +370,7 @@ module OutboundHttpLogger
         filtered = hash.dup
         @sensitive_body_keys.each do |sensitive_key|
           filtered.each_key do |key|
-            if key.to_s.downcase.include?(sensitive_key.downcase)
-              filtered[key] = '[FILTERED]'
-            end
+            filtered[key] = '[FILTERED]' if key.to_s.downcase.include?(sensitive_key.downcase)
           end
         end
 
@@ -161,5 +381,67 @@ module OutboundHttpLogger
 
         filtered
       end
+
+    public
+
+    # Create a backup of the current configuration state (thread-safe)
+    def backup
+      @mutex.synchronize do
+        {
+          enabled: @enabled,
+          excluded_urls: @excluded_urls.dup,
+          excluded_content_types: @excluded_content_types.dup,
+          sensitive_headers: @sensitive_headers.dup,
+          sensitive_body_keys: @sensitive_body_keys.dup,
+          max_body_size: @max_body_size,
+          debug_logging: @debug_logging,
+          logger: @logger,
+          secondary_database_url: @secondary_database_url,
+          secondary_database_adapter: @secondary_database_adapter,
+          max_recursion_depth: @max_recursion_depth,
+          strict_recursion_detection: @strict_recursion_detection,
+          observability_enabled: @observability_enabled,
+          structured_logging_enabled: @structured_logging_enabled,
+          structured_logging_format: @structured_logging_format,
+          structured_logging_level: @structured_logging_level,
+          metrics_collection_enabled: @metrics_collection_enabled,
+          debug_tools_enabled: @debug_tools_enabled,
+          performance_logging_threshold: @performance_logging_threshold,
+          net_http_patch_enabled: @net_http_patch_enabled,
+          faraday_patch_enabled: @faraday_patch_enabled,
+          httparty_patch_enabled: @httparty_patch_enabled,
+          auto_patch_detection: @auto_patch_detection
+        }
+      end
+    end
+
+    # Restore configuration from a backup (thread-safe)
+    def restore(backup)
+      @mutex.synchronize do
+        @enabled = backup[:enabled]
+        @excluded_urls = backup[:excluded_urls]
+        @excluded_content_types = backup[:excluded_content_types]
+        @sensitive_headers = backup[:sensitive_headers]
+        @sensitive_body_keys = backup[:sensitive_body_keys]
+        @max_body_size = backup[:max_body_size]
+        @debug_logging = backup[:debug_logging]
+        @logger = backup[:logger]
+        @secondary_database_url = backup[:secondary_database_url]
+        @secondary_database_adapter = backup[:secondary_database_adapter]
+        @max_recursion_depth = backup[:max_recursion_depth] if backup.key?(:max_recursion_depth)
+        @strict_recursion_detection = backup[:strict_recursion_detection] if backup.key?(:strict_recursion_detection)
+        @observability_enabled = backup[:observability_enabled] if backup.key?(:observability_enabled)
+        @structured_logging_enabled = backup[:structured_logging_enabled] if backup.key?(:structured_logging_enabled)
+        @structured_logging_format = backup[:structured_logging_format] if backup.key?(:structured_logging_format)
+        @structured_logging_level = backup[:structured_logging_level] if backup.key?(:structured_logging_level)
+        @metrics_collection_enabled = backup[:metrics_collection_enabled] if backup.key?(:metrics_collection_enabled)
+        @debug_tools_enabled = backup[:debug_tools_enabled] if backup.key?(:debug_tools_enabled)
+        @performance_logging_threshold = backup[:performance_logging_threshold] if backup.key?(:performance_logging_threshold)
+        @net_http_patch_enabled = backup[:net_http_patch_enabled] if backup.key?(:net_http_patch_enabled)
+        @faraday_patch_enabled = backup[:faraday_patch_enabled] if backup.key?(:faraday_patch_enabled)
+        @httparty_patch_enabled = backup[:httparty_patch_enabled] if backup.key?(:httparty_patch_enabled)
+        @auto_patch_detection = backup[:auto_patch_detection] if backup.key?(:auto_patch_detection)
+      end
+    end
   end
 end

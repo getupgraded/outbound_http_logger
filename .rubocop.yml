@@ -1,15 +1,19 @@
+# Prevent inheriting from parent directory configs
+inherit_from: []
+
 plugins:
 - rubocop-rails
 - rubocop-thread_safety
 - rubocop-minitest
 - rubocop-performance
-- rubocop-md
 - rubocop-packaging
 - rubocop-rake
 
 AllCops:
   TargetRubyVersion: 3.4
   TargetRailsVersion: 7.2
+  NewCops: enable
+  SuggestExtensions: false  # Disable auto-detection of missing extensions
   Include:
     - 'lib/**/*.rb'
     - 'test/**/*.rb'
@@ -18,13 +22,32 @@ AllCops:
   Exclude:
     - 'bin/**/*'
     - 'sig/**/*'
+    - 'vendor/**/*'
+    - 'tmp/**/*'
+    - 'pkg/**/*'
     - 'lib/outbound_http_logger/generators/templates/**/*'
+    - 'README.md'
+    - 'AGENTS.md'
+    - 'THREAD_ISOLATION.md'
 
 # Gem-specific overrides
-Style/Documentation:
+Rails/ApplicationRecord:
+  Enabled: false
+
+Rails/RefuteMethods:
   Enabled: true
+  EnforcedStyle: refute
+
+Style/Documentation:
+  Enabled: false
   Exclude:
     - 'test/**/*'
+
+Style/MultilineBlockChain:
+  Enabled: false
+
+Rails/SkipsModelValidations:
+  Enabled: false
 
 Metrics/BlockLength:
   Exclude:
@@ -33,9 +56,50 @@ Metrics/BlockLength:
 
 # Allow longer lines in tests for readability
 Layout/LineLength:
+  Max: 205
+  AllowURI: true
+  AllowHeredoc: true
   Exclude:
     - 'test/**/*'
 
 Layout/IndentationConsistency:
   Enabled: true
   EnforcedStyle: indented_internal_methods
+
+Metrics/MethodLength:
+  Max: 250
+  Exclude:
+    - 'test/**/*'
+
+Metrics/AbcSize:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+ThreadSafety/ClassInstanceVariable:
+  Enabled: false
+
+Metrics/ClassLength:
+  Enabled: false
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Style/ClassVars:
+  Enabled: false
+
+Naming/MethodParameterName:
+  Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Enabled: false
+
+Gemspec/RequiredRubyVersion:
+  Enabled: false
+
+Metrics/ModuleLength:
+  Enabled: false

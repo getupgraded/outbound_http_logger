@@ -2,7 +2,7 @@
 
 require 'rails/railtie'
 
-module OutboundHttpLogger
+module OutboundHTTPLogger
   class Railtie < Rails::Railtie
     # Add rake tasks
     rake_tasks do

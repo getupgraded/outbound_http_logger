@@ -2,18 +2,42 @@ name: 'Outbound HTTP Logger CI'
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: 'Run full Ruby/Rails matrix'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
+  matrix-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show matrix configuration
+        run: |
+          echo "## Matrix Configuration" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix }}" == "true" ]]; then
+            echo "🔄 **Full Matrix**: Testing Ruby 3.2, 3.3, 3.4 × Rails 7.2.0, 8.0.1 (6 combinations)" >> $GITHUB_STEP_SUMMARY
+            echo "Triggered by: Release branch, tag, or manual dispatch" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚡ **Fast Matrix**: Testing Ruby 3.4 × Rails 7.2.0 only (1 combination)" >> $GITHUB_STEP_SUMMARY
+            echo "Triggered by: Regular PR or main branch push" >> $GITHUB_STEP_SUMMARY
+          fi
+
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ruby-version: ['3.4']
-        rails-version: ['7.2.0']
-    
+        # Default to Ruby 3.4 + Rails 7.2.0 for fast feedback
+        # Full matrix for release branches, tags, or manual dispatch
+        ruby-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["3.2", "3.3", "3.4"]') || fromJSON('["3.4"]') }}
+        rails-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["7.2.0", "8.0.1"]') || fromJSON('["7.2.0"]') }}
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -22,27 +46,70 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
-          bundler-cache: false
+          bundler-cache: true
 
       - name: Install dependencies
         run: |
           bundle install --jobs 4 --retry 3
 
-      - name: Run tests
-        run: |
-          # Run tests individually to avoid interference issues
-          bundle exec ruby -Ilib:test test/patches/test_net_http_patch.rb
-          bundle exec ruby -Ilib:test test/concerns/test_outbound_logging.rb
-          bundle exec ruby -Ilib:test test/integration/test_loggable_integration.rb
-          bundle exec ruby -Ilib:test test/models/test_outbound_request_log.rb
-          bundle exec ruby -Ilib:test test/test_outbound_http_logger.rb
-
       - name: Run RuboCop
         run: |
-          # Install RuboCop and required plugins from root Gemfile
-          bundle install --jobs 4 --retry 3
-          bundle exec rubocop --config .rubocop.yml
-        continue-on-error: true
+          bundle exec rake rubocop
+
+      - name: Run tests
+        env:
+          STRICT_TEST_ISOLATION: true
+        run: |
+          # Run all tests together (thread-safe with proper isolation)
+          bundle exec rake test
+
+  postgresql-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Same conditional matrix as main test job
+        ruby-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["3.2", "3.3", "3.4"]') || fromJSON('["3.4"]') }}
+        rails-version: ${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/') || github.event.inputs.full_matrix == 'true') && fromJSON('["7.2.0", "8.0.1"]') || fromJSON('["7.2.0"]') }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: outbound_http_logger_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+      - name: Set up PostgreSQL environment
+        run: |
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/outbound_http_logger_test" >> $GITHUB_ENV
+          echo "OUTBOUND_HTTP_LOGGER_TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/outbound_http_logger_test" >> $GITHUB_ENV
+
+      - name: Test PostgreSQL connection and adapters
+        run: |
+          ./bin/test-databases
+
+      - name: Run database adapter tests with PostgreSQL
+        env:
+          STRICT_TEST_ISOLATION: true
+        run: |
+          bundle exec ruby -Itest test/test_database_adapters.rb
 
   build:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
-module OutboundHttpLogger
-  VERSION = "0.0.1"
+module OutboundHTTPLogger
+  VERSION = '0.0.2'
 end
