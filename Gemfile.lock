@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    outbound_http_logger (0.1.0)
+    outbound_http_logger (0.0.2)
       activerecord (>= 7.0.0)
       activesupport (>= 7.0.0)
       rack (>= 2.0)
