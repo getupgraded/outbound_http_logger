@@ -128,6 +128,30 @@ OutboundHTTPLogger.disable_secondary_logging!
 OutboundHTTPLogger.secondary_logging_enabled?
 ```
 
+### Environment Variable Control
+
+You can completely disable the gem (preventing middleware registration, patch application, and all functionality) using environment variables:
+
+```bash
+# Disable the gem completely (no middleware, no patches, no logging)
+ENABLE_OUTBOUND_HTTP_LOGGER=false
+
+# Enable the gem (default behavior)
+ENABLE_OUTBOUND_HTTP_LOGGER=true
+# or simply omit the variable (defaults to enabled)
+```
+
+**Supported disable values:** `false`, `FALSE`, `0`, `no`, `off`
+**All other values (including missing/empty) enable the gem**
+
+This is particularly useful for:
+- **Heroku deployments**: Change environment variables to disable logging without code changes
+- **Performance testing**: Quickly disable HTTP logging overhead
+- **Debugging**: Isolate issues by disabling HTTP request logging
+- **Independent control**: Disable outbound logging while keeping inbound logging active
+
+**Note:** Environment variable changes require an application restart to take effect.
+
 ### Environment-specific Configuration
 
 ```ruby

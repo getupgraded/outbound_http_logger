@@ -16,7 +16,6 @@ require_relative 'outbound_http_logger/patches/faraday_patch'
 require_relative 'outbound_http_logger/patches/httparty_patch'
 require_relative 'outbound_http_logger/logger'
 require_relative 'outbound_http_logger/observability'
-require_relative 'outbound_http_logger/railtie' if defined?(Rails)
 
 module OutboundHTTPLogger
   class Error < StandardError; end
@@ -28,6 +27,16 @@ module OutboundHTTPLogger
   @observability = nil
 
   class << self
+    # Check if the gem is enabled via environment variable
+    # @return [Boolean] true if the gem should be loaded and active
+    def gem_enabled?
+      env_value = ENV.fetch('ENABLE_OUTBOUND_HTTP_LOGGER', nil)
+      return true if env_value.blank? # Default to enabled
+
+      # Treat 'false', 'FALSE', '0', 'no', 'off' as disabled
+      %w[false FALSE 0 no off].exclude?(env_value.to_s.strip)
+    end
+
     # Get the current configuration instance (checks for thread-local override first)
     # @return [Configuration] The current configuration (thread-local override or global)
     def configuration
@@ -555,3 +564,6 @@ module OutboundHTTPLogger
       end
   end
 end
+
+# Only load Railtie if Rails is defined AND the gem is enabled via environment variable
+require_relative 'outbound_http_logger/railtie' if defined?(Rails) && %w[false FALSE 0 no off].exclude?(ENV['ENABLE_OUTBOUND_HTTP_LOGGER'].to_s.strip)
