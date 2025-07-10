@@ -19,7 +19,7 @@ module OutboundHTTPLogger
         # Execute the HTTP request
         response = yield if block_given?
 
-        # Calculate duration
+        # Calculate duration in seconds and milliseconds
         end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         duration_seconds = end_time - start_time
 
@@ -43,6 +43,7 @@ module OutboundHTTPLogger
         # Calculate duration even for failed requests
         end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         duration_seconds = end_time - start_time
+        duration_ms      = (duration_seconds * 1000).round(2)
 
         # Log the failed request
         error_response_data = { status_code: 0, headers: {}, body: "Error: #{e.class}: #{e.message}" }
@@ -51,7 +52,7 @@ module OutboundHTTPLogger
           url,
           request_data,
           error_response_data,
-          duration_seconds
+          duration_ms
         )
 
         # Record observability data for failed request
@@ -63,7 +64,8 @@ module OutboundHTTPLogger
     end
 
     # Log a request without executing it (for when patches capture the data directly)
-    def log_completed_request(method, url, request_data, response_data, duration_seconds)
+    def log_completed_request(method, url, request_data, response_data, duration_ms)
+      duration_seconds = duration_ms / 1000.0
       return unless configuration.enabled?
       return unless configuration.should_log_url?(url)
 
@@ -132,7 +134,7 @@ module OutboundHTTPLogger
             method,
             url,
             status_code,
-            duration,
+            duration, # Already in seconds
             error
           )
         rescue StandardError => e

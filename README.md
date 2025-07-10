@@ -128,6 +128,30 @@ OutboundHTTPLogger.disable_secondary_logging!
 OutboundHTTPLogger.secondary_logging_enabled?
 ```
 
+### Environment Variable Control
+
+You can completely disable the gem (preventing middleware registration, patch application, and all functionality) using environment variables:
+
+```bash
+# Disable the gem completely (no middleware, no patches, no logging)
+ENABLE_OUTBOUND_HTTP_LOGGER=false
+
+# Enable the gem (default behavior)
+ENABLE_OUTBOUND_HTTP_LOGGER=true
+# or simply omit the variable (defaults to enabled)
+```
+
+**Supported disable values:** `false`, `FALSE`, `0`, `no`, `off`
+**All other values (including missing/empty) enable the gem**
+
+This is particularly useful for:
+- **Heroku deployments**: Change environment variables to disable logging without code changes
+- **Performance testing**: Quickly disable HTTP logging overhead
+- **Debugging**: Isolate issues by disabling HTTP request logging
+- **Independent control**: Disable outbound logging while keeping inbound logging active
+
+**Note:** Environment variable changes require an application restart to take effect.
+
 ### Environment-specific Configuration
 
 ```ruby
@@ -249,6 +273,43 @@ recent_logs.each do |log|
   puts '---'
 end
 ```
+
+### Duration API Flexibility
+
+The gem provides flexible duration APIs to accommodate different use cases and maintain consistency with sister gems:
+
+```ruby
+# Database storage: Always stored as duration_ms for precision
+log = OutboundHTTPLogger::Models::OutboundRequestLog.first
+
+# Reading duration in different units
+log.duration_ms       # => 1500.0 (milliseconds)
+log.duration_seconds  # => 1.5 (calculated from duration_ms)
+log.duration_in_seconds # => 1.5 (alias for compatibility)
+
+# Setting duration in different units
+log.duration_ms = 2000.0
+log.duration_seconds  # => 2.0
+
+log.duration_seconds = 3.5
+log.duration_ms       # => 3500.0
+
+# API methods uses seconds
+OutboundHTTPLogger::Models::OutboundRequestLog.log_request(
+  'POST', 'https://api.example.com/users',
+  request_data, response_data,
+  1.5024  # duration_seconds
+)
+
+
+
+```
+
+**Key Benefits:**
+- **Clean storage**: Only `duration_ms` is stored in the database for precision
+- **Flexible access**: Both millisecond and second APIs available for reading
+- **Sister gem consistency**: API accepts `duration_seconds` like `inbound_http_logger`
+- **Automatic conversion**: Seamless conversion from seconds to milliseconds for storage
 
 ## Test Utilities
 
@@ -681,12 +742,12 @@ OutboundHTTPLogger::Models::OutboundRequestLog
 #### 3. Monitor Performance Impact
 
 ```ruby
-# Check average request duration
+# Check average request duration (in milliseconds)
 avg_duration = OutboundHTTPLogger::Models::OutboundRequestLog
   .where('created_at > ?', 1.day.ago)
-  .average(:duration_seconds)
+  .average(:duration_ms)
 
-puts "Average request duration: #{avg_duration}s"
+puts "Average request duration: #{avg_duration}ms"
 ```
 
 ### Scaling Considerations

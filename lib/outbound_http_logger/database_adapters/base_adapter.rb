@@ -72,7 +72,7 @@ module OutboundHTTPLogger
       end
 
       # Log an outbound HTTP request to the database
-      def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = 0, options = {})
+      def log_request(method, url, request_data = {}, response_data = {}, duration_seconds = nil, options = {})
         return nil unless enabled?
         return nil unless OutboundHTTPLogger.configuration.should_log_url?(url)
 
