@@ -179,8 +179,9 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         _(log.http_method).must_equal 'POST'
         _(log.url).must_equal 'https://api.example.com/users'
         _(log.status_code).must_equal 201
-        _(log.duration_seconds).must_equal 0.25
+        _(log.duration_in_seconds).must_equal 0.25
         _(log.duration_ms).must_equal 250.0
+        _(log.duration_seconds).must_equal 0.25
         _(log.request_headers['Authorization']).must_equal '[FILTERED]'
         _(log.request_headers['Content-Type']).must_equal 'application/json'
         _(log.response_body).must_equal '{"id":1,"name":"test"}'
@@ -235,7 +236,6 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         url: 'https://api.example.com/users',
         status_code: 201,
         duration_ms: 150.5,
-        duration_seconds: 0.1505,
         request_headers: { 'Content-Type' => 'application/json' },
         request_body: '{"name": "John"}',
         response_headers: { 'Content-Type' => 'application/json' },
@@ -250,11 +250,49 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
         http_method: 'GET',
         url: 'https://api.example.com/slow',
         status_code: 200,
-        duration_ms: 2500,
-        duration_seconds: 2.5
+        duration_ms: 2500
       )
 
       _(slow_log.formatted_duration).must_equal '2.5s'
+    end
+
+    it 'supports duration_seconds getter and setter' do
+      log = log_model.create!(
+        http_method: 'GET',
+        url: 'https://api.example.com/test',
+        status_code: 200,
+        duration_ms: 1500.0
+      )
+
+      # Test getter
+      _(log.duration_seconds).must_equal 1.5
+
+      # Test setter
+      log.duration_seconds = 2.5
+
+      _(log.duration_ms).must_equal 2500.0
+      _(log.duration_seconds).must_equal 2.5
+    end
+
+    it 'supports duration_seconds parameter' do
+      OutboundHTTPLogger.with_configuration(enabled: true) do
+        request_data = {
+          headers: { 'Content-Type' => 'application/json' },
+          body: '{"test": true}'
+        }
+
+        response_data = {
+          status_code: 200,
+          headers: { 'Content-Type' => 'application/json' },
+          body: '{"success": true}'
+        }
+
+        log = log_model.log_request('POST', 'https://api.example.com/test', request_data, response_data, 2.0)
+
+        _(log).wont_be_nil
+        _(log.duration_seconds).must_equal 2.0
+        _(log.duration_ms).must_equal 2000.0
+      end
     end
 
     it 'determines success status' do

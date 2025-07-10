@@ -43,7 +43,6 @@ describe 'Rake Tasks Integration' do
         url: 'https://api.example.com/users',
         status_code: 200,
         duration_ms: 150.5,
-        duration_seconds: 0.1505,
         request_headers: { 'Accept' => 'application/json' },
         response_headers: { 'Content-Type' => 'application/json' },
         created_at: old_time

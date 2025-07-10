@@ -177,12 +177,13 @@ module OutboundHTTPLogger
             return unless OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
             duration_seconds = end_time - start_time
+            duration_ms = (duration_seconds * 1000).round(2)
             OutboundHTTPLogger.logger.log_completed_request(
               method,
               url,
               request_data,
               response_data,
-              duration_seconds
+              duration_ms
             )
           end
         end
@@ -191,6 +192,7 @@ module OutboundHTTPLogger
         def log_failed_request(method, url, library_specific_data, error, start_time, end_time, library_name = nil)
           OutboundHTTPLogger::ErrorHandling.handle_logging_error('log failed request') do
             duration_seconds = end_time - start_time
+            duration_ms = (duration_seconds * 1000).round(2)
             request_data = build_request_data(library_specific_data, library_name)
 
             response_data = {
@@ -204,7 +206,7 @@ module OutboundHTTPLogger
               url,
               request_data,
               response_data,
-              duration_seconds
+              duration_ms
             )
           end
         end

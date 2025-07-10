@@ -126,7 +126,7 @@ describe 'Rails Integration Tests' do
       _(migration_content).must_include 't.json :request_body'
       _(migration_content).must_include 't.json :response_body'
       _(migration_content).must_include 't.json :metadata'
-      _(migration_content).must_include 't.decimal :duration_seconds'
+
       _(migration_content).must_include 't.decimal :duration_ms'
       _(migration_content).must_include 't.references :loggable, polymorphic: true'
       _(migration_content).must_include 't.timestamp :created_at'
@@ -206,7 +206,7 @@ describe 'Rails Integration Tests' do
       _(template_content).must_include 't.json :request_body'
       _(template_content).must_include 't.json :response_body'
       _(template_content).must_include 't.json :metadata'
-      _(template_content).must_include 't.decimal :duration_seconds'
+
       _(template_content).must_include 't.decimal :duration_ms'
       _(template_content).must_include 't.references :loggable, polymorphic: true'
       _(template_content).must_include 't.datetime :created_at'

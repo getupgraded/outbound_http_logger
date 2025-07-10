@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.3
+
+- remove unnecessary duration_seconds column from database
+
 ## 0.0.2
 
 ### Code Quality Improvements

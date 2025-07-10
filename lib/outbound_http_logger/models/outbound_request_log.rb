@@ -85,7 +85,6 @@ module OutboundHTTPLogger
             request_body: OutboundHTTPLogger.configuration.filter_body(request_data[:body]),
             response_headers: OutboundHTTPLogger.configuration.filter_headers(response_data[:headers] || {}),
             response_body: OutboundHTTPLogger.configuration.filter_body(response_data[:body]),
-            duration_seconds: duration_seconds,
             duration_ms: duration_ms,
             loggable: request_data[:loggable] || thread_loggable,
             metadata: merged_metadata
@@ -306,6 +305,11 @@ module OutboundHTTPLogger
         parsed_metadata
       end
 
+      # Get a formatted string of the request method and URL
+      def formatted_call
+        "#{http_method} #{url}"
+      end
+
       # Get a formatted string of the request
       def formatted_request
         "#{http_method} #{url}\n#{formatted_headers(request_headers)}\n\n#{formatted_body(request_body)}"
@@ -336,7 +340,7 @@ module OutboundHTTPLogger
         if duration_ms < 1000
           "#{duration_ms.round(2)}ms"
         else
-          "#{duration_seconds.round(2)}s"
+          "#{(duration_ms / 1000.0).round(2)}s"
         end
       end
 
@@ -403,7 +407,17 @@ module OutboundHTTPLogger
       end
 
       def duration_in_seconds
-        duration_seconds || (duration_ms ? duration_ms / 1000.0 : 0.0)
+        duration_ms ? duration_ms / 1000.0 : 0.0
+      end
+
+      # API compatibility: duration_seconds getter (calculated from duration_ms)
+      def duration_seconds
+        duration_ms ? duration_ms / 1000.0 : 0.0
+      end
+
+      # API compatibility: duration_seconds setter (converts to duration_ms)
+      def duration_seconds=(value)
+        self.duration_ms = value ? (value * 1000).round(2) : 0.0
       end
 
       def to_hash
