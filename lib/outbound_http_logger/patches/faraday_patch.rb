@@ -15,37 +15,26 @@ module OutboundHTTPLogger
         include CommonPatchBehavior
 
         def run_request(method, url, body, headers, &)
-          # Build the full URL first
-          full_url = build_url(url)
+          # Let Faraday handle URL building and capture the final URL from the response
+          # This avoids method name collision with Faraday's private build_url method
 
-          # Use common logging behavior
+          # Use common logging behavior - we'll get the final URL after the request
           log_http_request(
             'faraday',
-            full_url.to_s,
+            url.to_s, # Use the URL as-is initially, will be corrected in logging
             method.to_s.upcase,
             -> { { headers: headers || {}, body: body } },
             lambda { |response|
               {
                 status_code: response.status,
                 headers: response.headers.to_h,
-                body: response.body
+                body: response.body,
+                final_url: response.env.url.to_s # Capture the final resolved URL
               }
             },
             -> { super(method, url, body, headers, &) }
           )
         end
-
-        private
-
-          def build_url(url)
-            # If url is already absolute, return it as-is
-            return url if url.to_s.start_with?('http://', 'https://')
-
-            # Build URL from connection's base URL and the relative path
-            base_url = url_prefix.to_s.chomp('/')
-            relative_url = url.to_s.start_with?('/') ? url.to_s : "/#{url}"
-            "#{base_url}#{relative_url}"
-          end
       end
     end
   end

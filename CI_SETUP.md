@@ -208,9 +208,41 @@ The gem uses thread-based parallel testing instead of process-based to avoid DRb
 - **State Verification**: Optional strict isolation checks (`STRICT_TEST_ISOLATION=true`)
 - **Database Isolation**: Separate connections and transaction handling per thread
 
+## Code Coverage Reporting
+
+### Overview
+
+The gem includes automated code coverage reporting for pull requests using SimpleCov and GitHub Actions.
+
+### Configuration
+
+- **Coverage Tool**: SimpleCov with LCOV formatter for GitHub Actions integration
+- **Reporting**: Automatic PR comments with coverage percentages and diff highlighting
+- **Behavior**: Non-blocking (won't fail builds on coverage decreases)
+- **Formats**: HTML reports for local development, LCOV for CI/CD
+
+### Local Coverage
+
+Run tests locally to generate HTML coverage reports:
+
+```bash
+bundle exec rake test
+open coverage/index.html
+```
+
+### CI Coverage Reporting
+
+On pull requests, the CI automatically:
+1. Generates LCOV coverage data during test execution
+2. Posts coverage percentages as PR comments
+3. Highlights coverage changes for modified files
+4. Shows uncovered lines in the diff view
+5. Deletes old coverage comments to avoid spam
+
+The coverage reporting uses the `romeovs/lcov-reporter-action` GitHub Action and requires no additional setup or external services.
+
 ## Future Improvements
 
-- Consider adding code coverage reporting
 - Add performance benchmarking
 - Implement automated dependency updates
 - Add integration tests with real HTTP libraries

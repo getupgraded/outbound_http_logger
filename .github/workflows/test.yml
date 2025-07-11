@@ -63,6 +63,14 @@ jobs:
           # Run all tests together (thread-safe with proper isolation)
           bundle exec rake test
 
+      - name: Report coverage to PR
+        if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.3.1
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          delete-old-comments: true
+
   postgresql-test:
     runs-on: ubuntu-latest
     strategy:

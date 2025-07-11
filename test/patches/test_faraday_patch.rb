@@ -132,6 +132,122 @@ describe 'Faraday Patch' do
         _(logs.count).must_equal 6 # Faraday uses Net::HTTP, so each request is logged twice
       end
     end
+
+    # NEW TESTS: Base URL + Relative Path scenarios (the missing coverage!)
+    describe 'base URL with relative paths' do
+      it 'logs requests with base URL and relative path' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          stub_request(:get, 'https://api.example.com/users')
+            .to_return(status: 200, body: '{"users": []}', headers: { 'Content-Type' => 'application/json' })
+
+          # This is the pattern that was missing from our tests!
+          connection = Faraday.new('https://api.example.com')
+          response = connection.get('/users') # Relative path
+
+          _(response.status).must_equal 200
+
+          log = assert_request_logged(:get, 'https://api.example.com/users', 200)
+          _(log.response_body).must_equal '{"users":[]}'
+        end
+      end
+
+      it 'logs requests with base URL and relative path without leading slash' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          stub_request(:get, 'https://api.example.com/posts')
+            .to_return(status: 200, body: '{"posts": []}', headers: { 'Content-Type' => 'application/json' })
+
+          connection = Faraday.new('https://api.example.com')
+          response = connection.get('posts') # Relative path without leading slash
+
+          _(response.status).must_equal 200
+
+          log = assert_request_logged(:get, 'https://api.example.com/posts', 200)
+          _(log.response_body).must_equal '{"posts":[]}'
+        end
+      end
+
+      it 'logs POST requests with base URL and relative path' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          stub_request(:post, 'https://api.example.com/users')
+            .with(body: '{"name": "Jane"}', headers: { 'Content-Type' => 'application/json' })
+            .to_return(status: 201, body: '{"id": 2, "name": "Jane"}', headers: { 'Content-Type' => 'application/json' })
+
+          connection = Faraday.new('https://api.example.com', headers: { 'Content-Type' => 'application/json' })
+          response = connection.post('/users', '{"name": "Jane"}')
+
+          _(response.status).must_equal 201
+
+          log = assert_request_logged(:post, 'https://api.example.com/users', 201)
+          _(log.request_body).must_equal '{"name":"Jane"}'
+          _(log.response_body).must_equal '{"id":2,"name":"Jane"}'
+        end
+      end
+
+      it 'handles complex base URLs with paths' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          # When base URL has a path and we use absolute path, it replaces the base path
+          stub_request(:get, 'https://api.example.com/users')
+            .to_return(status: 200, body: '{"users": []}', headers: { 'Content-Type' => 'application/json' })
+
+          connection = Faraday.new('https://api.example.com/v1')
+          response = connection.get('/users') # This replaces /v1 with /users
+
+          _(response.status).must_equal 200
+
+          log = assert_request_logged(:get, 'https://api.example.com/users', 200)
+          _(log.response_body).must_equal '{"users":[]}'
+        end
+      end
+
+      it 'handles base URLs with path appending (relative paths)' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          # When using relative paths (no leading slash), they append to the base URL
+          stub_request(:get, 'https://api.example.com/v1/users')
+            .to_return(status: 200, body: '{"users": []}', headers: { 'Content-Type' => 'application/json' })
+
+          connection = Faraday.new('https://api.example.com/v1/') # Note trailing slash
+          response = connection.get('users') # Relative path appends
+
+          _(response.status).must_equal 200
+
+          log = assert_request_logged(:get, 'https://api.example.com/v1/users', 200)
+          _(log.response_body).must_equal '{"users":[]}'
+        end
+      end
+
+      it 'handles OAuth-like flows with complex URL building' do
+        OutboundHTTPLogger.with_configuration(enabled: true) do
+          # Simulate an OAuth token request
+          stub_request(:post, 'https://oauth.example.com/token')
+            .with(
+              body: 'grant_type=authorization_code&code=abc123&client_id=test',
+              headers: { 'Content-Type' => 'application/x-www-form-urlencoded' }
+            )
+            .to_return(
+              status: 200,
+              body: '{"access_token": "token123", "token_type": "Bearer"}',
+              headers: { 'Content-Type' => 'application/json' }
+            )
+
+          # This mimics how OAuth libraries often set up Faraday
+          connection = Faraday.new('https://oauth.example.com') do |conn|
+            conn.request :url_encoded
+            conn.adapter Faraday.default_adapter
+          end
+
+          response = connection.post('/token') do |req|
+            req.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            req.body = 'grant_type=authorization_code&code=abc123&client_id=test'
+          end
+
+          _(response.status).must_equal 200
+
+          log = assert_request_logged(:post, 'https://oauth.example.com/token', 200)
+          _(log.request_body).must_include 'grant_type=authorization_code'
+          _(log.response_body).must_include 'access_token'
+        end
+      end
+    end
   end
 
   describe 'when logging is disabled' do

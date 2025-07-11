@@ -176,11 +176,14 @@ module OutboundHTTPLogger
             content_type = extract_content_type(response_data[:headers])
             return unless OutboundHTTPLogger.configuration.should_log_content_type?(content_type)
 
+            # Use final_url from response if available (for Faraday), otherwise use original URL
+            final_url = response_data.delete(:final_url) || url
+
             duration_seconds = end_time - start_time
             duration_ms = (duration_seconds * 1000).round(2)
             OutboundHTTPLogger.logger.log_completed_request(
               method,
-              url,
+              final_url,
               request_data,
               response_data,
               duration_ms

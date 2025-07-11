@@ -1,5 +1,37 @@
 # frozen_string_literal: true
 
+# Start SimpleCov before loading any application code
+require 'simplecov'
+SimpleCov.start do
+  add_filter '/test/'
+  add_filter '/vendor/'
+  add_filter '/bin/'
+
+  add_group 'Core', 'lib/outbound_http_logger.rb'
+  add_group 'Configuration', 'lib/outbound_http_logger/configuration.rb'
+  add_group 'Patches', 'lib/outbound_http_logger/patches'
+  add_group 'Models', 'lib/outbound_http_logger/models'
+  add_group 'Loggers', 'lib/outbound_http_logger/loggers'
+  add_group 'Utilities', ['lib/outbound_http_logger/error_handling.rb', 'lib/outbound_http_logger/test.rb']
+
+  # Add LCOV formatter for GitHub Actions coverage reporting
+  if ENV['CI']
+    require 'simplecov-lcov'
+    SimpleCov::Formatter::LcovFormatter.config do |c|
+      c.report_with_single_file = true
+      c.single_report_path = 'coverage/lcov.info'
+    end
+    SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter.new([
+                                                                     SimpleCov::Formatter::HTMLFormatter,
+                                                                     SimpleCov::Formatter::LcovFormatter
+                                                                   ])
+  end
+
+  # Set minimum coverage thresholds (temporarily disabled to see current state)
+  # minimum_coverage 70
+  # minimum_coverage_by_file 60
+end
+
 $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 
 # Load environment variables for testing
