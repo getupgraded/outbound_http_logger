@@ -14,6 +14,19 @@ SimpleCov.start do
   add_group 'Loggers', 'lib/outbound_http_logger/loggers'
   add_group 'Utilities', ['lib/outbound_http_logger/error_handling.rb', 'lib/outbound_http_logger/test.rb']
 
+  # Add LCOV formatter for GitHub Actions coverage reporting
+  if ENV['CI']
+    require 'simplecov-lcov'
+    SimpleCov::Formatter::LcovFormatter.config do |c|
+      c.report_with_single_file = true
+      c.single_report_path = 'coverage/lcov.info'
+    end
+    SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter.new([
+                                                                     SimpleCov::Formatter::HTMLFormatter,
+                                                                     SimpleCov::Formatter::LcovFormatter
+                                                                   ])
+  end
+
   # Set minimum coverage thresholds (temporarily disabled to see current state)
   # minimum_coverage 70
   # minimum_coverage_by_file 60

@@ -24,6 +24,7 @@ group :development, :test do
   gem 'rubocop-rake', '~> 0.7'
   gem 'rubocop-thread_safety', '~> 0.7'
   gem 'simplecov', '~> 0.22'
+  gem 'simplecov-lcov', '~> 0.8'
   gem 'sqlite3', '>= 2.1'
   gem 'webmock', '~> 3.0'
 end
