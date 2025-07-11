@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.4
+
+* fix bug with Faraday patch where only full URL: usage was considered (not initializing with base url, then calling with paths)
+* add coverage checking (informational, does not fail PRs)
+
 ## 0.0.3
 
 * remove unnecessary duration_seconds column from database
