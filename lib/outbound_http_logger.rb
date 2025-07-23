@@ -13,7 +13,6 @@ require_relative 'outbound_http_logger/concerns/outbound_logging'
 require_relative 'outbound_http_logger/patches/common_patch_behavior'
 require_relative 'outbound_http_logger/patches/net_http_patch'
 require_relative 'outbound_http_logger/patches/faraday_patch'
-require_relative 'outbound_http_logger/patches/httparty_patch'
 require_relative 'outbound_http_logger/logger'
 require_relative 'outbound_http_logger/observability'
 
@@ -254,7 +253,6 @@ module OutboundHTTPLogger
     def reset_patches!
       Patches::NetHTTPPatch.reset!
       Patches::FaradayPatch.reset!
-      Patches::HTTPartyPatch.reset!
     end
 
     # Get status of all patches
@@ -272,12 +270,6 @@ module OutboundHTTPLogger
           applied: Patches::FaradayPatch.applied?,
           library_available: defined?(Faraday),
           active: configuration.enabled? && configuration.faraday_patch_enabled? && Patches::FaradayPatch.applied?
-        },
-        'HTTParty' => {
-          enabled: configuration.httparty_patch_enabled?,
-          applied: Patches::HTTPartyPatch.applied?,
-          library_available: defined?(HTTParty),
-          active: configuration.enabled? && configuration.httparty_patch_enabled? && Patches::HTTPartyPatch.applied?
         }
       }
     end
@@ -285,7 +277,7 @@ module OutboundHTTPLogger
     # Get list of available patches
     # @return [Array<String>] List of supported patch names
     def available_patches
-      %w[Net::HTTP Faraday HTTParty]
+      %w[Net::HTTP Faraday]
     end
 
     # Get list of currently applied patches
@@ -294,7 +286,6 @@ module OutboundHTTPLogger
       patches = []
       patches << 'Net::HTTP' if Patches::NetHTTPPatch.applied?
       patches << 'Faraday' if Patches::FaradayPatch.applied?
-      patches << 'HTTParty' if Patches::HTTPartyPatch.applied?
       patches
     end
 
@@ -306,12 +297,11 @@ module OutboundHTTPLogger
       patches = []
       patches << 'Net::HTTP' if configuration.net_http_patch_enabled? && Patches::NetHTTPPatch.applied?
       patches << 'Faraday' if configuration.faraday_patch_enabled? && Patches::FaradayPatch.applied?
-      patches << 'HTTParty' if configuration.httparty_patch_enabled? && Patches::HTTPartyPatch.applied?
       patches
     end
 
     # Enable a specific patch
-    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday')
     # @return [Boolean] true if patch was enabled, false if invalid library name
     def enable_patch(library_name) # rubocop:disable Naming/PredicateMethod
       case library_name.to_s.downcase
@@ -323,10 +313,6 @@ module OutboundHTTPLogger
         configuration.faraday_patch_enabled = true
         apply_patch_if_needed('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
         true
-      when 'httparty'
-        configuration.httparty_patch_enabled = true
-        apply_patch_if_needed('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
-        true
       else
         false
       end
@@ -334,7 +320,7 @@ module OutboundHTTPLogger
 
     # Disable a specific patch
     # Note: This only prevents the patch from being active, it cannot unapply already applied patches
-    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday')
     # @return [Boolean] true if patch was disabled, false if invalid library name
     def disable_patch(library_name) # rubocop:disable Naming/PredicateMethod
       case library_name.to_s.downcase
@@ -346,10 +332,6 @@ module OutboundHTTPLogger
         configuration.faraday_patch_enabled = false
         log_patch_disabled('Faraday')
         true
-      when 'httparty'
-        configuration.httparty_patch_enabled = false
-        log_patch_disabled('HTTParty')
-        true
       else
         false
       end
@@ -360,8 +342,7 @@ module OutboundHTTPLogger
     def library_status
       {
         'Net::HTTP' => library_info_safe('Net::HTTP', 'net/http'),
-        'Faraday' => library_info_safe('Faraday', 'faraday'),
-        'HTTParty' => library_info_safe('HTTParty', 'httparty')
+        'Faraday' => library_info_safe('Faraday', 'faraday')
       }
     end
 
@@ -401,12 +382,6 @@ module OutboundHTTPLogger
           apply_patch_with_fallback('Faraday', -> { Patches::FaradayPatch.apply! }, -> { defined?(Faraday) })
         else
           log_patch_skipped('Faraday', 'disabled in configuration')
-        end
-
-        if configuration.httparty_patch_enabled?
-          apply_patch_with_fallback('HTTParty', -> { Patches::HTTPartyPatch.apply! }, -> { defined?(HTTParty) })
-        else
-          log_patch_skipped('HTTParty', 'disabled in configuration')
         end
       end
 
@@ -511,8 +486,6 @@ module OutboundHTTPLogger
           Patches::NetHTTPPatch.applied?
         when 'Faraday'
           Patches::FaradayPatch.applied?
-        when 'HTTParty'
-          Patches::HTTPartyPatch.applied?
         else
           false
         end
@@ -527,8 +500,6 @@ module OutboundHTTPLogger
           Patches::NetHTTPPatch.applied?
         when 'Faraday'
           Patches::FaradayPatch.applied?
-        when 'HTTParty'
-          Patches::HTTPartyPatch.applied?
         else
           false
         end

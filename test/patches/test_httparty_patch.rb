@@ -3,9 +3,13 @@
 require 'test_helper'
 require 'httparty'
 
-describe 'HTTParty Patch' do
+# NOTE: HTTParty patch has been removed as HTTParty uses Net::HTTP internally.
+# These tests are kept for reference and to verify that HTTParty requests
+# are still logged correctly via the Net::HTTP patch.
+describe 'HTTParty Integration (via Net::HTTP patch)' do
   before do
-    OutboundHTTPLogger::Patches::HTTPartyPatch.apply!
+    # Apply Net::HTTP patch instead of HTTParty patch
+    OutboundHTTPLogger::Patches::NetHTTPPatch.apply!
   end
 
   describe 'when logging is enabled' do
@@ -21,6 +25,8 @@ describe 'HTTParty Patch' do
         log = assert_request_logged(:get, 'https://api.example.com/users', 200)
         _(log.response_body).must_equal '{"users":[]}'
         _(log.duration_ms).must_be :>, 0
+        # Verify that the library is detected as HTTParty
+        _(log.metadata['library']).must_equal 'httparty'
       end
     end
 
@@ -118,7 +124,7 @@ describe 'HTTParty Patch' do
 
         logs = OutboundHTTPLogger::Models::OutboundRequestLog.where(url: 'https://api.example.com/test')
 
-        _(logs.count).must_equal 6 # HTTParty uses Net::HTTP, so each request is logged twice
+        _(logs.count).must_equal 3 # HTTParty requests are now logged only once via Net::HTTP patch
       end
     end
   end

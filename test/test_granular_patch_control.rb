@@ -9,12 +9,6 @@ rescue LoadError
   # Faraday not available
 end
 
-begin
-  require 'httparty'
-rescue LoadError
-  # HTTParty not available
-end
-
 class TestGranularPatchControl < Minitest::Test
   def setup
     OutboundHTTPLogger.reset_configuration!
@@ -31,7 +25,6 @@ class TestGranularPatchControl < Minitest::Test
 
     assert_predicate config, :net_http_patch_enabled?
     assert_predicate config, :faraday_patch_enabled?
-    assert_predicate config, :httparty_patch_enabled?
     assert_predicate config, :auto_patch_detection?
   end
 
@@ -41,7 +34,6 @@ class TestGranularPatchControl < Minitest::Test
     assert config.patch_enabled?('net_http')
     assert config.patch_enabled?('Net::HTTP')
     assert config.patch_enabled?('faraday')
-    assert config.patch_enabled?('httparty')
     refute config.patch_enabled?('unknown')
   end
 
@@ -50,14 +42,12 @@ class TestGranularPatchControl < Minitest::Test
       config.enabled = true
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
     end
 
     config = OutboundHTTPLogger.configuration
 
     assert_predicate config, :net_http_patch_enabled?
     refute_predicate config, :faraday_patch_enabled?
-    assert_predicate config, :httparty_patch_enabled?
   end
 
   def test_patch_status_reporting
@@ -65,7 +55,6 @@ class TestGranularPatchControl < Minitest::Test
       config.enabled = true
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
     end
 
     status = OutboundHTTPLogger.patch_status
@@ -73,7 +62,6 @@ class TestGranularPatchControl < Minitest::Test
     assert_kind_of Hash, status
     assert status.key?('Net::HTTP')
     assert status.key?('Faraday')
-    assert status.key?('HTTParty')
 
     # Check Net::HTTP status
     net_http_status = status['Net::HTTP']
@@ -89,15 +77,6 @@ class TestGranularPatchControl < Minitest::Test
     refute faraday_status[:enabled]
     refute faraday_status[:applied] # Should not be applied when disabled
     refute faraday_status[:active]
-
-    # Check HTTParty status (only if available)
-    return unless defined?(HTTParty)
-
-    httparty_status = status['HTTParty']
-
-    assert httparty_status[:enabled]
-    assert httparty_status[:applied] # Should be applied after configure
-    assert httparty_status[:active]
   end
 
   def test_available_patches
@@ -106,7 +85,6 @@ class TestGranularPatchControl < Minitest::Test
     assert_kind_of Array, patches
     assert_includes patches, 'Net::HTTP'
     assert_includes patches, 'Faraday'
-    assert_includes patches, 'HTTParty'
   end
 
   def test_applied_patches
@@ -114,7 +92,6 @@ class TestGranularPatchControl < Minitest::Test
       config.enabled = true
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
     end
 
     applied = OutboundHTTPLogger.applied_patches
@@ -122,11 +99,6 @@ class TestGranularPatchControl < Minitest::Test
     assert_kind_of Array, applied
     assert_includes applied, 'Net::HTTP'
     refute_includes applied, 'Faraday'
-
-    # Only check HTTParty if it's available
-    return unless defined?(HTTParty)
-
-    assert_includes applied, 'HTTParty'
   end
 
   def test_active_patches
@@ -134,7 +106,6 @@ class TestGranularPatchControl < Minitest::Test
       config.enabled = true
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
     end
 
     active = OutboundHTTPLogger.active_patches
@@ -142,11 +113,6 @@ class TestGranularPatchControl < Minitest::Test
     assert_kind_of Array, active
     assert_includes active, 'Net::HTTP'
     refute_includes active, 'Faraday'
-
-    # Only check HTTParty if it's available
-    return unless defined?(HTTParty)
-
-    assert_includes active, 'HTTParty'
   end
 
   def test_active_patches_when_disabled
@@ -154,7 +120,6 @@ class TestGranularPatchControl < Minitest::Test
       config.enabled = false
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = true
-      config.httparty_patch_enabled = true
     end
 
     active = OutboundHTTPLogger.active_patches
@@ -183,7 +148,6 @@ class TestGranularPatchControl < Minitest::Test
     assert OutboundHTTPLogger.enable_patch('net_http')
     assert OutboundHTTPLogger.enable_patch('Net::HTTP')
     assert OutboundHTTPLogger.enable_patch('faraday')
-    assert OutboundHTTPLogger.enable_patch('httparty')
     refute OutboundHTTPLogger.enable_patch('unknown')
   end
 
@@ -207,7 +171,6 @@ class TestGranularPatchControl < Minitest::Test
     assert OutboundHTTPLogger.disable_patch('net_http')
     assert OutboundHTTPLogger.disable_patch('Net::HTTP')
     assert OutboundHTTPLogger.disable_patch('faraday')
-    assert OutboundHTTPLogger.disable_patch('httparty')
     refute OutboundHTTPLogger.disable_patch('unknown')
   end
 
@@ -215,7 +178,6 @@ class TestGranularPatchControl < Minitest::Test
     OutboundHTTPLogger.configure do |config|
       config.net_http_patch_enabled = false
       config.faraday_patch_enabled = true
-      config.httparty_patch_enabled = false
       config.auto_patch_detection = false
     end
 
@@ -224,7 +186,6 @@ class TestGranularPatchControl < Minitest::Test
     OutboundHTTPLogger.configure do |config|
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
       config.auto_patch_detection = true
     end
 
@@ -234,7 +195,6 @@ class TestGranularPatchControl < Minitest::Test
 
     refute_predicate config, :net_http_patch_enabled?
     assert_predicate config, :faraday_patch_enabled?
-    refute_predicate config, :httparty_patch_enabled?
     refute_predicate config, :auto_patch_detection?
   end
 
@@ -248,18 +208,12 @@ class TestGranularPatchControl < Minitest::Test
       config.logger = logger
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = true
     end
 
     log_output = output.string
 
     assert_includes log_output, 'Net::HTTP patch applied'
     assert_includes log_output, 'Faraday patch skipped - disabled in configuration'
-
-    # Only check HTTParty if it's available
-    return unless defined?(HTTParty)
-
-    assert_includes log_output, 'HTTParty patch applied'
   end
 
   def test_runtime_patch_disabling_with_logging
@@ -289,7 +243,6 @@ class TestGranularPatchControl < Minitest::Test
     config = OutboundHTTPLogger.configuration
     config.net_http_patch_enabled = true
     config.faraday_patch_enabled = false
-    config.httparty_patch_enabled = true
 
     # Create a dummy object that includes CommonPatchBehavior to test the method
     dummy_class = Class.new do
@@ -299,7 +252,6 @@ class TestGranularPatchControl < Minitest::Test
 
     assert dummy.send(:patch_enabled_for_library?, 'net_http', config)
     refute dummy.send(:patch_enabled_for_library?, 'faraday', config)
-    assert dummy.send(:patch_enabled_for_library?, 'httparty', config)
     refute dummy.send(:patch_enabled_for_library?, 'unknown', config)
   end
 
@@ -314,7 +266,6 @@ class TestGranularPatchControl < Minitest::Test
 
     assert_predicate config, :net_http_patch_enabled?
     assert_predicate config, :faraday_patch_enabled?
-    assert_predicate config, :httparty_patch_enabled?
 
     # All available patches should be applied
     applied = OutboundHTTPLogger.applied_patches
@@ -323,10 +274,6 @@ class TestGranularPatchControl < Minitest::Test
 
     # Only check if libraries are available
     assert_includes applied, 'Faraday' if defined?(Faraday)
-
-    return unless defined?(HTTParty)
-
-    assert_includes applied, 'HTTParty'
   end
 
   def test_configuration_validation

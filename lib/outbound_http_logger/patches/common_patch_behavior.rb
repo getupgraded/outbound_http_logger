@@ -141,7 +141,7 @@ module OutboundHTTPLogger
       private
 
         # Check if patch is enabled for a specific library
-        # @param library_name [String] Library name (e.g., 'net_http', 'faraday', 'httparty')
+        # @param library_name [String] Library name (e.g., 'net_http', 'faraday')
         # @param config [Configuration] Configuration instance
         # @return [Boolean] true if patch is enabled for this library
         def patch_enabled_for_library?(library_name, config)
@@ -150,8 +150,6 @@ module OutboundHTTPLogger
             config.net_http_patch_enabled?
           when 'faraday'
             config.faraday_patch_enabled?
-          when 'httparty'
-            config.httparty_patch_enabled?
           else
             false
           end
@@ -159,14 +157,48 @@ module OutboundHTTPLogger
 
         # Build standardized request data hash with thread-local context
         def build_request_data(library_specific_data, library_name = nil)
+          config = OutboundHTTPLogger.configuration
+
+          # Detect calling library if enabled
+          detected_library = library_name
+          detected_library = detect_calling_library_from_stack || library_name if config.detect_calling_library? && library_name == 'net_http'
+
           # Merge thread-local metadata with library name
           thread_metadata = Thread.current[:outbound_http_logger_metadata] || {}
-          merged_metadata = library_name ? thread_metadata.merge(library: library_name) : thread_metadata
+          merged_metadata = detected_library ? thread_metadata.merge(library: detected_library) : thread_metadata
+
+          # Add call stack if debug logging is enabled
+          merged_metadata = merged_metadata.merge(call_stack: capture_call_stack) if config.debug_call_stack_logging?
 
           library_specific_data.merge(
             loggable: Thread.current[:outbound_http_logger_loggable],
             metadata: merged_metadata
           )
+        end
+
+        # Detect the calling library from the call stack
+        def detect_calling_library_from_stack
+          caller_locations.each do |location|
+            path = location.path
+
+            # Check for known HTTP libraries in the call stack
+            return 'httparty' if path.include?('httparty')
+            return 'faraday' if path.include?('faraday')
+            return 'rest-client' if path.include?('rest-client') || path.include?('restclient')
+            return 'typhoeus' if path.include?('typhoeus')
+            return 'patron' if path.include?('patron')
+            return 'excon' if path.include?('excon')
+            return 'httpclient' if path.include?('httpclient')
+          end
+
+          nil # Return nil if no known library is detected
+        end
+
+        # Capture call stack for debugging
+        def capture_call_stack
+          caller_locations.map do |location|
+            "#{location.path}:#{location.lineno}:in `#{location.label}'"
+          end
         end
 
         # Log successful HTTP request with standardized error handling

@@ -26,7 +26,6 @@ describe 'Optional Dependencies Handling' do
       _(status).must_be_kind_of Hash
       _(status.keys).must_include 'Net::HTTP'
       _(status.keys).must_include 'Faraday'
-      _(status.keys).must_include 'HTTParty'
 
       # Each library should have required fields
       status.each_value do |info|
@@ -50,11 +49,9 @@ describe 'Optional Dependencies Handling' do
       # Net::HTTP should always be available (part of Ruby standard library)
       _(status['Net::HTTP'][:available]).must_equal true
 
-      # Faraday and HTTParty should be available in test environment (they're in the Gemfile)
+      # Faraday should be available in test environment (they're in the Gemfile)
       # But let's be flexible in case they're not loaded yet
       _(status['Faraday'][:available]).must_equal true if defined?(Faraday)
-
-      _(status['HTTParty'][:available]).must_equal true if defined?(HTTParty)
     end
 
     it 'shows patch status correctly' do
@@ -75,9 +72,6 @@ describe 'Optional Dependencies Handling' do
         when 'Faraday'
 
           _(info[:patched]).must_equal OutboundHTTPLogger::Patches::FaradayPatch.applied?
-        when 'HTTParty'
-
-          _(info[:patched]).must_equal OutboundHTTPLogger::Patches::HTTPartyPatch.applied?
         end
       end
     end
@@ -94,7 +88,6 @@ describe 'Optional Dependencies Handling' do
       _(status).must_be_kind_of Hash
       _(status.keys).must_include 'Net::HTTP'
       _(status.keys).must_include 'Faraday'
-      _(status.keys).must_include 'HTTParty'
 
       # Each status should have the required fields
       status.each_value do |info|
@@ -119,7 +112,7 @@ describe 'Optional Dependencies Handling' do
 
       # Should contain success messages for available libraries
       _(log_content).must_include 'Net::HTTP patch applied successfully'
-      # NOTE: Faraday and HTTParty may or may not be loaded depending on test order
+      # NOTE: Faraday may or may not be loaded depending on test order
       # So we just check that no error messages are present
       _(log_content).wont_include 'Failed to patch'
     end
@@ -133,7 +126,6 @@ describe 'Optional Dependencies Handling' do
       # These should not raise errors
       _(OutboundHTTPLogger::Patches::NetHTTPPatch.respond_to?(:apply!)).must_equal true
       _(OutboundHTTPLogger::Patches::FaradayPatch.respond_to?(:apply!)).must_equal true
-      _(OutboundHTTPLogger::Patches::HTTPartyPatch.respond_to?(:apply!)).must_equal true
 
       # The library_available? method should work correctly
       _(OutboundHTTPLogger::Patches::NetHTTPPatch.library_available?(Net::HTTP)).must_equal true
@@ -182,10 +174,8 @@ describe 'Optional Dependencies Handling' do
 
       _(net_http_version).wont_be_nil
 
-      # Faraday and HTTParty should have version information
+      # Faraday should have version information
       _(status['Faraday'][:version]).wont_be_nil if status['Faraday'][:available]
-
-      _(status['HTTParty'][:version]).wont_be_nil if status['HTTParty'][:available]
     end
   end
 

@@ -33,8 +33,9 @@ module OutboundHTTPLogger
                   :performance_logging_threshold,
                   :net_http_patch_enabled,
                   :faraday_patch_enabled,
-                  :httparty_patch_enabled,
-                  :auto_patch_detection
+                  :auto_patch_detection,
+                  :debug_call_stack_logging,
+                  :detect_calling_library
 
     def initialize
       @mutex                  = Mutex.new
@@ -96,8 +97,11 @@ module OutboundHTTPLogger
       # Patch control configuration
       @net_http_patch_enabled = true # Enable Net::HTTP patching by default
       @faraday_patch_enabled = true # Enable Faraday patching by default
-      @httparty_patch_enabled = true # Enable HTTParty patching by default
       @auto_patch_detection = true # Automatically apply patches when libraries are detected
+
+      # Call stack and library detection configuration
+      @debug_call_stack_logging = false # Include full call stack in log records for debugging
+      @detect_calling_library = true # Detect and log the calling library (Faraday, etc.)
     end
 
     # Check if logging is enabled
@@ -237,10 +241,16 @@ module OutboundHTTPLogger
       @faraday_patch_enabled == true
     end
 
-    # Check if HTTParty patch is enabled
-    # @return [Boolean] true if HTTParty patch is enabled
-    def httparty_patch_enabled?
-      @httparty_patch_enabled == true
+    # Check if debug call stack logging is enabled
+    # @return [Boolean] true if debug call stack logging is enabled
+    def debug_call_stack_logging?
+      @debug_call_stack_logging == true
+    end
+
+    # Check if calling library detection is enabled
+    # @return [Boolean] true if calling library detection is enabled
+    def detect_calling_library?
+      @detect_calling_library == true
     end
 
     # Check if automatic patch detection is enabled
@@ -250,7 +260,7 @@ module OutboundHTTPLogger
     end
 
     # Check if a specific patch is enabled by library name
-    # @param library_name [String, Symbol] Library name ('net_http', 'faraday', 'httparty')
+    # @param library_name [String, Symbol] Library name ('net_http', 'faraday')
     # @return [Boolean] true if the patch is enabled
     def patch_enabled?(library_name)
       case library_name.to_s.downcase
@@ -258,8 +268,6 @@ module OutboundHTTPLogger
         net_http_patch_enabled?
       when 'faraday'
         faraday_patch_enabled?
-      when 'httparty'
-        httparty_patch_enabled?
       else
         false
       end
@@ -386,7 +394,7 @@ module OutboundHTTPLogger
 
     # Create a backup of the current configuration state (thread-safe)
     def backup
-      @mutex.synchronize do
+      @mutex.synchronize do # rubocop:disable Metrics/BlockLength
         {
           enabled: @enabled,
           excluded_urls: @excluded_urls.dup,
@@ -409,8 +417,9 @@ module OutboundHTTPLogger
           performance_logging_threshold: @performance_logging_threshold,
           net_http_patch_enabled: @net_http_patch_enabled,
           faraday_patch_enabled: @faraday_patch_enabled,
-          httparty_patch_enabled: @httparty_patch_enabled,
-          auto_patch_detection: @auto_patch_detection
+          auto_patch_detection: @auto_patch_detection,
+          debug_call_stack_logging: @debug_call_stack_logging,
+          detect_calling_library: @detect_calling_library
         }
       end
     end
@@ -439,8 +448,9 @@ module OutboundHTTPLogger
         @performance_logging_threshold = backup[:performance_logging_threshold] if backup.key?(:performance_logging_threshold)
         @net_http_patch_enabled = backup[:net_http_patch_enabled] if backup.key?(:net_http_patch_enabled)
         @faraday_patch_enabled = backup[:faraday_patch_enabled] if backup.key?(:faraday_patch_enabled)
-        @httparty_patch_enabled = backup[:httparty_patch_enabled] if backup.key?(:httparty_patch_enabled)
         @auto_patch_detection = backup[:auto_patch_detection] if backup.key?(:auto_patch_detection)
+        @debug_call_stack_logging = backup[:debug_call_stack_logging] if backup.key?(:debug_call_stack_logging)
+        @detect_calling_library = backup[:detect_calling_library] if backup.key?(:detect_calling_library)
       end
     end
   end
