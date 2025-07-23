@@ -31,7 +31,6 @@ class TestPatchDebugDetailed < Minitest::Test
       config.enabled = true
       config.faraday_patch_enabled = true
       config.net_http_patch_enabled = false # Disable to avoid Faraday->Net::HTTP interference
-      config.httparty_patch_enabled = false
     end
 
     # Verify patch is applied
@@ -94,7 +93,6 @@ class TestPatchDebugDetailed < Minitest::Test
       config.enabled = true
       config.faraday_patch_enabled = true
       config.net_http_patch_enabled = false # Disable to avoid Faraday->Net::HTTP interference
-      config.httparty_patch_enabled = false
     end
 
     # Verify patch is applied

@@ -6,7 +6,7 @@ A production-safe gem for comprehensive outbound HTTP request logging in Rails a
 
 ## Features
 
-- **Multi-library support**: Net::HTTP, Faraday, HTTParty with automatic patching
+- **Multi-library support**: Net::HTTP, Faraday with automatic patching (HTTParty supported via Net::HTTP)
 - **Database adapters**: Optimized PostgreSQL JSONB and SQLite native JSON support
 - **Comprehensive logging**: Request/response headers, bodies, timing, status codes
 - **Security-first**: Automatic filtering of sensitive headers and body data
@@ -61,6 +61,12 @@ OutboundHTTPLogger.configure do |config|
 
   # Optional: Configure secondary database for logging
   config.configure_secondary_database('sqlite3:///log/outbound_requests.sqlite3')
+
+  # Detect calling library from call stack (default: true)
+  config.detect_calling_library = true
+
+  # Include full call stack in logs for debugging (default: false)
+  config.debug_call_stack_logging = false
 end
 ```
 
@@ -170,13 +176,13 @@ end
 
 ## Usage
 
-Once configured, the gem automatically logs all outbound HTTP requests via patches to Net::HTTP, Faraday, and HTTParty:
+Once configured, the gem automatically logs all outbound HTTP requests via patches to Net::HTTP and Faraday. HTTParty requests are logged via the Net::HTTP patch since HTTParty uses Net::HTTP internally:
 
 ```ruby
 # All outbound requests will be automatically logged
-Net::HTTP.get(URI('https://api.example.com/users'))  # -> logged
-HTTParty.get('https://api.example.com/orders')       # -> logged
-Faraday.get('https://api.example.com/products')      # -> logged
+Net::HTTP.get(URI('https://api.example.com/users'))  # -> logged via Net::HTTP patch
+HTTParty.get('https://api.example.com/orders')       # -> logged via Net::HTTP patch (HTTParty uses Net::HTTP)
+Faraday.get('https://api.example.com/products')      # -> logged via Faraday patch (if using Net::HTTP adapter)
 ```
 
 ### Model Integration

@@ -8,7 +8,42 @@ module OutboundHTTPLogger
       extend CommonPatchBehavior::ClassMethods
 
       def self.apply!
+        # Check if Faraday is using Net::HTTP adapter
+        unless using_net_http_adapter?
+          warn_about_unsupported_adapter
+          return
+        end
+
         apply_patch_safely!(Faraday, Faraday::Connection, ConnectionMethods, 'Faraday')
+      end
+
+      # Check if Faraday is configured to use Net::HTTP adapter
+      def self.using_net_http_adapter?
+        return false unless defined?(Faraday)
+
+        # Create a temporary connection to check the default adapter
+        temp_connection = Faraday.new
+        adapter_class = temp_connection.builder.adapter&.klass
+
+        # Check if it's Net::HTTP or Net::HTTP-based adapter
+        adapter_class&.name&.include?('NetHttp') || adapter_class&.name&.include?('Net::HTTP')
+      rescue StandardError
+        # If we can't determine the adapter, assume it's not Net::HTTP
+        false
+      end
+
+      # Log warning about unsupported adapter
+      def self.warn_about_unsupported_adapter
+        config = OutboundHTTPLogger.configuration
+        logger = config.get_logger
+
+        return unless logger
+
+        logger.warn(
+          'OutboundHTTPLogger: Faraday patch skipped - Faraday is not using Net::HTTP adapter. ' \
+          'Only Net::HTTP-based adapters are currently supported. ' \
+          'Faraday requests will still be logged via Net::HTTP patch if the adapter uses Net::HTTP internally.'
+        )
       end
 
       module ConnectionMethods

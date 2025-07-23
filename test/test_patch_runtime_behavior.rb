@@ -79,7 +79,6 @@ class TestPatchRuntimeBehavior < Minitest::Test
       config.enabled = true
       config.faraday_patch_enabled = true
       config.net_http_patch_enabled = false # Disable to avoid Faraday->Net::HTTP interference
-      config.httparty_patch_enabled = false
     end
 
     # Verify patch is applied
@@ -119,18 +118,17 @@ class TestPatchRuntimeBehavior < Minitest::Test
   end
 
   def test_httparty_patch_respects_runtime_disable
-    skip 'HTTParty not available' unless defined?(HTTParty)
-
-    # First enable and apply the patch, but disable other patches to avoid interference
+    # HTTParty patch has been removed - HTTParty requests are now handled by Net::HTTP patch
+    # Configure with Net::HTTP enabled to handle HTTParty requests
     OutboundHTTPLogger.configure do |config|
       config.enabled = true
-      config.httparty_patch_enabled = true
-      config.net_http_patch_enabled = false # Disable to avoid HTTParty->Net::HTTP interference
+      config.net_http_patch_enabled = true # Enable to handle HTTParty requests
       config.faraday_patch_enabled = false
     end
 
-    # Verify patch is applied
-    assert_predicate OutboundHTTPLogger::Patches::HTTPartyPatch, :applied?
+    # HTTParty patch removed - HTTParty requests are now logged via Net::HTTP patch
+    # Verify Net::HTTP patch is applied (which will handle HTTParty requests)
+    assert_predicate OutboundHTTPLogger::Patches::NetHTTPPatch, :applied?
 
     # Get initial count before any requests
     initial_count = OutboundHTTPLogger::Models::OutboundRequestLog.count
@@ -145,23 +143,23 @@ class TestPatchRuntimeBehavior < Minitest::Test
 
     assert_operator after_first_request_count, :>, initial_count, 'First request should have been logged'
 
-    # Now disable the patch at runtime
+    # Now try to disable the HTTParty patch at runtime (should warn and do nothing)
     OutboundHTTPLogger.disable_patch('httparty')
 
-    # Patch should still be applied but inactive
-    assert_predicate OutboundHTTPLogger::Patches::HTTPartyPatch, :applied?
-    refute_predicate OutboundHTTPLogger.configuration, :httparty_patch_enabled?
+    # Net::HTTP patch should still be applied and active (HTTParty requests go through it)
+    assert_predicate OutboundHTTPLogger::Patches::NetHTTPPatch, :applied?
+    assert_predicate OutboundHTTPLogger.configuration, :net_http_patch_enabled?
 
-    # Make another request - should NOT be logged
+    # Make another request - should STILL be logged (via Net::HTTP patch)
     stub_request(:get, 'http://example.com/httparty-test2')
       .to_return(status: 200, body: 'success')
 
     HTTParty.get('http://example.com/httparty-test2')
 
-    # Should not have increased
+    # Should have increased (HTTParty requests still logged via Net::HTTP)
     final_count = OutboundHTTPLogger::Models::OutboundRequestLog.count
 
-    assert_equal after_first_request_count, final_count
+    assert_equal after_first_request_count + 1, final_count
   end
 
   def test_selective_patch_application_prevents_logging
@@ -170,13 +168,11 @@ class TestPatchRuntimeBehavior < Minitest::Test
       config.enabled = true
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = false
-      config.httparty_patch_enabled = false
     end
 
     # Only Net::HTTP patch should be applied
     assert_predicate OutboundHTTPLogger::Patches::NetHTTPPatch, :applied?
     refute_predicate OutboundHTTPLogger::Patches::FaradayPatch, :applied?
-    refute_predicate OutboundHTTPLogger::Patches::HTTPartyPatch, :applied?
 
     # Get initial count before any requests
     initial_count = OutboundHTTPLogger::Models::OutboundRequestLog.count
@@ -257,13 +253,11 @@ class TestPatchRuntimeBehavior < Minitest::Test
       config.enabled = false
       config.net_http_patch_enabled = true
       config.faraday_patch_enabled = true
-      config.httparty_patch_enabled = true
     end
 
     # No patches should be applied when globally disabled
     refute_predicate OutboundHTTPLogger::Patches::NetHTTPPatch, :applied?
     refute_predicate OutboundHTTPLogger::Patches::FaradayPatch, :applied?
-    refute_predicate OutboundHTTPLogger::Patches::HTTPartyPatch, :applied?
 
     # No requests should be logged
     stub_request(:get, 'http://example.com/test')

@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.0.5
+
+Breaking Changes (which is common at this stage in the project)
+
+### HTTParty Patch Removed
+
+**HTTParty patch has been removed** to eliminate duplicate logging. HTTParty uses Net::HTTP internally, so HTTParty requests are now logged via the Net::HTTP patch with automatic library detection.
+
+**Before:**
+```ruby
+# Both patches would log the same request twice
+OutboundHTTPLogger.patch_status['HTTParty'][:applied]  # true
+OutboundHTTPLogger.patch_status['Net::HTTP'][:applied] # true
+HTTParty.get('https://api.example.com/test')           # logged twice
+```
+
+**After:**
+```ruby
+# Only Net::HTTP patch needed, with library detection
+OutboundHTTPLogger.patch_status['Net::HTTP'][:applied] # true
+HTTParty.get('https://api.example.com/test')           # logged once with library: 'httparty'
+```
+
+### New Configuration Options
+
+```ruby
+OutboundHTTPLogger.configure do |config|
+  # Detect calling library from call stack (default: true)
+  config.detect_calling_library = true
+
+  # Include full call stack in logs for debugging (default: false)
+  config.debug_call_stack_logging = false
+end
+```
+
+### Faraday Adapter Validation
+
+Faraday patch now validates that Faraday is using a Net::HTTP-based adapter. If not, the patch is skipped with a warning.
+
 ## 0.0.4
 
 * fix bug with Faraday patch where only full URL: usage was considered (not initializing with base url, then calling with paths)

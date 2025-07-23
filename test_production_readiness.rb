@@ -83,11 +83,11 @@ puts "\n4. Testing Patch Application..."
 
 # Apply patches
 OutboundHTTPLogger::Patches::NetHTTPPatch.apply!
-OutboundHTTPLogger::Patches::HTTPartyPatch.apply!
+# HTTParty patch removed - HTTParty requests handled by Net::HTTP patch
 OutboundHTTPLogger::Patches::FaradayPatch.apply!
 
 puts "✅ Net::HTTP patch applied: #{OutboundHTTPLogger::Patches::NetHTTPPatch.applied?}"
-puts "✅ HTTParty patch applied: #{OutboundHTTPLogger::Patches::HTTPartyPatch.applied?}"
+puts "✅ HTTParty requests handled by Net::HTTP patch (no separate HTTParty patch needed)"
 puts "✅ Faraday patch applied: #{OutboundHTTPLogger::Patches::FaradayPatch.applied?}"
 
 # Test 5: Net::HTTP Integration
