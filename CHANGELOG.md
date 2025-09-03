@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.0.6 (unreleased)
+
+### Fixed
+
+#### Application Error Handling
+
+**BREAKING CHANGE**: Fixed problematic error handling that was catching application errors and making them appear to originate from OutboundHTTPLogger.
+
+**Problem**: The gem was using broad `rescue StandardError => e` blocks that caught ALL application errors during HTTP requests, logged them with our gem's context, and then re-raised them. This made error reporting systems think our gem was the source of application errors when we were just an intermediary.
+
+**Solution**: Removed broad error catching for application errors while preserving failsafe behavior for our own logging operations.
+
+**Before:**
+```ruby
+# This pattern made errors appear to come from our gem
+rescue StandardError => e
+  # Log with our gem's context
+  error_response_data = { status_code: 0, headers: {}, body: "Error: #{e.class}: #{e.message}" }
+  Models::OutboundRequestLog.log_request(method, url, request_data, error_response_data, duration_ms)
+  raise e  # Re-raise, but error traces now show our gem
+end
+```
+
+**After:**
+```ruby
+# Application errors pass through to normal error handling
+# Only our logging operations are wrapped in failsafe error handling
+ErrorHandling.handle_logging_error('log successful request') do
+  # Our logging code here - errors handled gracefully
+end
+```
+
+**Impact**:
+- ✅ Application errors (network failures, timeouts, etc.) now pass through to normal application error handling
+- ✅ Our gem's logging operations still have failsafe error handling to prevent breaking HTTP requests
+- ✅ Error reporting systems now show the true source of application errors
+- ✅ Thread safety and cleanup mechanisms are preserved
+
+**Migration**: No code changes required. Application errors will now be handled by your application's normal error handling instead of being caught by our gem.
+
 ## 0.0.5
 
 Breaking Changes (which is common at this stage in the project)
