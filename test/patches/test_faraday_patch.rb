@@ -108,10 +108,11 @@ describe 'Faraday Patch' do
 
         connection = Faraday.new
 
+        # Application error should be raised normally (Faraday wraps SocketError in ConnectionFailed)
         _(proc { connection.get('https://api.example.com/error') }).must_raise Faraday::ConnectionFailed
 
-        log = assert_request_logged(:get, 'https://api.example.com/error', 0)
-        _(log.response_body).must_include 'SocketError'
+        # Should NOT log application errors - they should pass through to normal error handling
+        assert_no_request_logged(:get, 'https://api.example.com/error')
       end
     end
 

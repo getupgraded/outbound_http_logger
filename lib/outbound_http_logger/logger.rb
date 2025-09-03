@@ -9,20 +9,23 @@ module OutboundHTTPLogger
     end
 
     # Log an outbound HTTP request with timing
+    # This method executes the HTTP request and logs it with failsafe error handling
+    # Application errors during HTTP execution are allowed to pass through
     def log_request(method, url, request_data = {})
       return yield if block_given? && !configuration.enabled?
       return yield if block_given? && !configuration.should_log_url?(url)
 
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-      begin
-        # Execute the HTTP request
-        response = yield if block_given?
+      # Execute the HTTP request (let application errors pass through)
+      response = yield if block_given?
 
-        # Calculate duration in seconds and milliseconds
-        end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        duration_seconds = end_time - start_time
+      # Calculate duration in seconds
+      end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      duration_seconds = end_time - start_time
 
+      # Log the successful request with failsafe error handling
+      ErrorHandling.handle_logging_error('log successful request') do
         # Extract response data
         response_data = extract_response_data(response)
 
@@ -37,30 +40,9 @@ module OutboundHTTPLogger
 
         # Record observability data
         record_observability_data(method, url, response_data[:status_code], duration_seconds)
-
-        response
-      rescue StandardError => e
-        # Calculate duration even for failed requests
-        end_time         = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        duration_seconds = end_time - start_time
-        duration_ms      = (duration_seconds * 1000).round(2)
-
-        # Log the failed request
-        error_response_data = { status_code: 0, headers: {}, body: "Error: #{e.class}: #{e.message}" }
-        Models::OutboundRequestLog.log_request(
-          method,
-          url,
-          request_data,
-          error_response_data,
-          duration_ms
-        )
-
-        # Record observability data for failed request
-        record_observability_data(method, url, 0, duration_seconds, e)
-
-        # Re-raise the error
-        raise e
       end
+
+      response
     end
 
     # Log a request without executing it (for when patches capture the data directly)
@@ -69,16 +51,19 @@ module OutboundHTTPLogger
       return unless configuration.enabled?
       return unless configuration.should_log_url?(url)
 
-      Models::OutboundRequestLog.log_request(
-        method,
-        url,
-        request_data,
-        response_data,
-        duration_seconds
-      )
+      # Log the completed request with failsafe error handling
+      ErrorHandling.handle_logging_error('log completed request') do
+        Models::OutboundRequestLog.log_request(
+          method,
+          url,
+          request_data,
+          response_data,
+          duration_seconds
+        )
 
-      # Record observability data
-      record_observability_data(method, url, response_data[:status_code], duration_seconds)
+        # Record observability data
+        record_observability_data(method, url, response_data[:status_code], duration_seconds)
+      end
     end
 
     private
@@ -129,7 +114,8 @@ module OutboundHTTPLogger
       def record_observability_data(method, url, status_code, duration, error = nil)
         return unless @configuration.observability_enabled?
 
-        begin
+        # Use standardized error handling for our observability operations
+        ErrorHandling.handle_logging_error('record observability data', logger: @configuration.logger) do
           OutboundHTTPLogger.observability.record_http_request(
             method,
             url,
@@ -137,10 +123,6 @@ module OutboundHTTPLogger
             duration, # Already in seconds
             error
           )
-        rescue StandardError => e
-          # Don't let observability errors break the main request flow
-          # Log the error if debug logging is enabled
-          @configuration.logger.error("Observability error: #{e.message}") if @configuration.debug_logging && @configuration.logger
         end
       end
   end

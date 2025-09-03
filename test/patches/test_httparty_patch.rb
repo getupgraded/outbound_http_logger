@@ -104,10 +104,11 @@ describe 'HTTParty Integration (via Net::HTTP patch)' do
         stub_request(:get, 'https://api.example.com/error')
           .to_raise(SocketError.new('Connection failed'))
 
+        # Application error should be raised normally
         _(proc { HTTParty.get('https://api.example.com/error') }).must_raise SocketError
 
-        log = assert_request_logged(:get, 'https://api.example.com/error', 0)
-        _(log.response_body).must_include 'SocketError'
+        # Should NOT log application errors - they should pass through to normal error handling
+        assert_no_request_logged(:get, 'https://api.example.com/error')
       end
     end
 

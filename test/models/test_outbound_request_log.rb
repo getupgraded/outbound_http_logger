@@ -68,21 +68,27 @@ describe OutboundHTTPLogger::Models::OutboundRequestLog do
     it 'requires http_method' do
       log = log_model.new(url: 'https://example.com', status_code: 200)
 
-      _(log.valid?).must_equal false
+      I18n.with_locale(:en) do
+        _(log.valid?).must_equal false
+      end
       _(log.errors[:http_method]).must_include "can't be blank"
     end
 
     it 'requires url' do
       log = log_model.new(http_method: 'GET', status_code: 200)
 
-      _(log.valid?).must_equal false
+      I18n.with_locale(:en) do
+        _(log.valid?).must_equal false
+      end
       _(log.errors[:url]).must_include "can't be blank"
     end
 
     it 'requires status_code' do
       log = log_model.new(http_method: 'GET', url: 'https://example.com')
 
-      _(log.valid?).must_equal false
+      I18n.with_locale(:en) do
+        _(log.valid?).must_equal false
+      end
       _(log.errors[:status_code]).must_include "can't be blank"
     end
 

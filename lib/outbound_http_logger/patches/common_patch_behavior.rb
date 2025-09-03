@@ -118,21 +118,28 @@ module OutboundHTTPLogger
 
           # Measure timing and make the request
           start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          response = super_proc.call
+          begin
+            response = super_proc.call
+          rescue NoMethodError => e
+            # Handle Net::HTTP internal errors like calling .closed? on nil connection
+            raise e unless e.message.include?('closed?') || e.message.include?('undefined method')
+
+            # Re-raise with more context about the Net::HTTP internal error
+            raise StandardError, "Net::HTTP internal error (possibly connection state issue): #{e.message}. " \
+                                 'This may be related to Net::HTTP version compatibility or connection management. ' \
+                                 "Original error: #{e.class}: #{e.message}"
+
+            # Re-raise other NoMethodErrors as-is
+          end
           end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-          # Capture response data
-          response_data = response_data_proc.call(response)
-
-          # Log successful request if content type is allowed
-          log_successful_request(method, url, request_data, response_data, start_time, end_time)
+          # Capture response data and log successful request with failsafe error handling
+          ErrorHandling.handle_logging_error('log successful request from patch') do
+            response_data = response_data_proc.call(response)
+            log_successful_request(method, url, request_data, response_data, start_time, end_time)
+          end
 
           response
-        rescue StandardError => e
-          # Log failed requests
-          end_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          log_failed_request(method, url, request_data_proc.call, e, start_time, end_time, library_name)
-          raise e
         ensure
           config.decrement_recursion_depth(library_name)
         end
@@ -216,29 +223,6 @@ module OutboundHTTPLogger
             OutboundHTTPLogger.logger.log_completed_request(
               method,
               final_url,
-              request_data,
-              response_data,
-              duration_ms
-            )
-          end
-        end
-
-        # Log failed HTTP request with standardized error handling
-        def log_failed_request(method, url, library_specific_data, error, start_time, end_time, library_name = nil)
-          OutboundHTTPLogger::ErrorHandling.handle_logging_error('log failed request') do
-            duration_seconds = end_time - start_time
-            duration_ms = (duration_seconds * 1000).round(2)
-            request_data = build_request_data(library_specific_data, library_name)
-
-            response_data = {
-              status_code: 0,
-              headers: {},
-              body: "Error: #{error.class}: #{error.message}"
-            }
-
-            OutboundHTTPLogger.logger.log_completed_request(
-              method,
-              url,
               request_data,
               response_data,
               duration_ms

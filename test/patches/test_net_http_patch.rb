@@ -120,11 +120,11 @@ describe 'Net::HTTP Patch' do
 
         uri = URI('https://api.example.com/error')
 
+        # Application error should be raised normally
         _(proc { Net::HTTP.get_response(uri) }).must_raise SocketError
 
-        # Should log the error
-        log = assert_request_logged(:get, 'https://api.example.com/error', 0)
-        _(log.response_body).must_include 'SocketError'
+        # Should NOT log application errors - they should pass through to normal error handling
+        assert_no_request_logged(:get, 'https://api.example.com/error')
       end
     end
 
