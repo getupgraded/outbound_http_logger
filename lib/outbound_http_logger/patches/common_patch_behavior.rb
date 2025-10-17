@@ -187,6 +187,7 @@ module OutboundHTTPLogger
         def detect_calling_library_from_stack
           caller_locations.each do |location|
             path = location.path
+            next if path.nil?
 
             # Check for known HTTP libraries in the call stack
             return 'httparty' if path.include?('httparty')
@@ -204,7 +205,8 @@ module OutboundHTTPLogger
         # Capture call stack for debugging
         def capture_call_stack
           caller_locations.map do |location|
-            "#{location.path}:#{location.lineno}:in `#{location.label}'"
+            path = location.path || '<unknown>'
+            "#{path}:#{location.lineno}:in `#{location.label}'"
           end
         end
 

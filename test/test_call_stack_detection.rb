@@ -103,5 +103,72 @@ describe 'Call Stack Detection' do
         _(log.metadata['library']).must_equal 'net_http'
       end
     end
+
+    it 'handles nil location.path gracefully (AWS SDK instrumentation case)' do
+      OutboundHTTPLogger.with_configuration(enabled: true, detect_calling_library: true) do
+        stub_request(:get, 'https://api.example.com/nil-path')
+          .to_return(status: 200, body: 'OK')
+
+        # Test that the code doesn't crash when location.path is nil
+        # This simulates the AWS SDK instrumentation case where caller_locations
+        # can include entries with nil paths
+        uri = URI('https://api.example.com/nil-path')
+        Net::HTTP.get_response(uri)
+
+        log = assert_request_logged(:get, 'https://api.example.com/nil-path', 200)
+        # Should not raise NoMethodError and should fall back to net_http
+        _(log.metadata['library']).must_equal 'net_http'
+      end
+    end
+  end
+
+  describe 'nil path handling in patch behavior' do
+    it 'detect_calling_library_from_stack skips nil paths' do
+      # Create a test class that includes CommonPatchBehavior
+      test_class = Class.new do
+        include OutboundHTTPLogger::Patches::CommonPatchBehavior
+      end
+      instance = test_class.new
+
+      # Mock caller_locations to return a mix of nil and valid paths
+      mock_locations = [
+        Struct.new(:path, :lineno, :label).new(nil, 10, 'method1'),
+        Struct.new(:path, :lineno, :label).new('/some/path/httparty.rb', 20, 'method2'),
+        Struct.new(:path, :lineno, :label).new(nil, 30, 'method3')
+      ]
+
+      # Stub caller_locations on the instance
+      instance.define_singleton_method(:caller_locations) { mock_locations }
+
+      # Should not raise NoMethodError and should detect httparty
+      result = instance.send(:detect_calling_library_from_stack)
+
+      _(result).must_equal 'httparty'
+    end
+
+    it 'capture_call_stack handles nil paths as <unknown>' do
+      # Create a test class that includes CommonPatchBehavior
+      test_class = Class.new do
+        include OutboundHTTPLogger::Patches::CommonPatchBehavior
+      end
+      instance = test_class.new
+
+      # Mock caller_locations to return a mix of nil and valid paths
+      mock_locations = [
+        Struct.new(:path, :lineno, :label).new(nil, 10, 'method1'),
+        Struct.new(:path, :lineno, :label).new('/some/path/file.rb', 20, 'method2')
+      ]
+
+      # Stub caller_locations on the instance
+      instance.define_singleton_method(:caller_locations) { mock_locations }
+
+      # Should not raise NoMethodError
+      result = instance.send(:capture_call_stack)
+
+      _(result).must_be_kind_of Array
+      _(result.length).must_equal 2
+      _(result[0]).must_include '<unknown>:10:in `method1\''
+      _(result[1]).must_include '/some/path/file.rb:20:in `method2\''
+    end
   end
 end
