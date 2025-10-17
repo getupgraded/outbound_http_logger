@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    outbound_http_logger (0.0.5)
+    outbound_http_logger (0.0.7)
       activerecord (>= 7.0.0)
       activesupport (>= 7.0.0)
       rack (>= 2.0)
@@ -166,6 +166,7 @@ GEM
 
 PLATFORMS
   arm64-darwin-24
+  arm64-darwin-25
   x86_64-linux
 
 DEPENDENCIES

@@ -50,6 +50,21 @@ class TestErrorHandlingFix < ActiveSupport::TestCase
       end
     end
 
+    it 'handles errors in build_request_data gracefully without breaking HTTP requests' do
+      OutboundHTTPLogger.with_configuration(enabled: true, detect_calling_library: true) do
+        # Stub a successful HTTP request
+        stub_request(:get, 'https://api.example.com/build-data-error')
+          .to_return(status: 200, body: 'OK')
+
+        # The HTTP request should succeed even if build_request_data fails
+        # (e.g., due to nil location.path in call stack detection)
+        response = Net::HTTP.get_response(URI('https://api.example.com/build-data-error'))
+
+        assert_equal '200', response.code
+        assert_equal 'OK', response.body
+      end
+    end
+
     it 'logs successful requests normally' do
       OutboundHTTPLogger.with_configuration(enabled: true) do
         # Stub a successful HTTP request

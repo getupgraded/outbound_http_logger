@@ -113,8 +113,11 @@ module OutboundHTTPLogger
         config.increment_recursion_depth(library_name)
 
         begin
-          # Capture request data and include library name in metadata
-          request_data = build_request_data(request_data_proc.call, library_name)
+          # Capture request data with failsafe error handling
+          # Errors in building request data should not break the HTTP request
+          request_data = ErrorHandling.handle_logging_error('build request data', default_return: {}) do
+            build_request_data(request_data_proc.call, library_name)
+          end
 
           # Measure timing and make the request
           start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -187,6 +190,7 @@ module OutboundHTTPLogger
         def detect_calling_library_from_stack
           caller_locations.each do |location|
             path = location.path
+            next if path.nil?
 
             # Check for known HTTP libraries in the call stack
             return 'httparty' if path.include?('httparty')
@@ -204,7 +208,8 @@ module OutboundHTTPLogger
         # Capture call stack for debugging
         def capture_call_stack
           caller_locations.map do |location|
-            "#{location.path}:#{location.lineno}:in `#{location.label}'"
+            path = location.path || '<unknown>'
+            "#{path}:#{location.lineno}:in `#{location.label}'"
           end
         end
 
