@@ -113,8 +113,11 @@ module OutboundHTTPLogger
         config.increment_recursion_depth(library_name)
 
         begin
-          # Capture request data and include library name in metadata
-          request_data = build_request_data(request_data_proc.call, library_name)
+          # Capture request data with failsafe error handling
+          # Errors in building request data should not break the HTTP request
+          request_data = ErrorHandling.handle_logging_error('build request data', default_return: {}) do
+            build_request_data(request_data_proc.call, library_name)
+          end
 
           # Measure timing and make the request
           start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
