@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.0.7
+
+### Fixed
+
+#### Call Stack Detection with AWS SDK Instrumentation
+
+**Problem**: When using AWS SDK with instrumentation enabled, `outbound_http_logger` would crash with:
+```
+NoMethodError: undefined method 'include?' for nil
+```
+
+This occurred because AWS SDK instrumentation creates call stack entries (`Thread::Backtrace::Location` objects) where the `path` attribute can be `nil`. The gem was calling `.include?()` on these nil values without checking first.
+
+**Solution**:
+1. Added nil checks in `detect_calling_library_from_stack` to skip locations with nil paths
+2. Handle nil paths in `capture_call_stack` by using `<unknown>` placeholder
+3. Wrapped `build_request_data` call in `ErrorHandling.handle_logging_error` to ensure errors in request data building don't break parent app HTTP requests
+
+**Changes**:
+- `detect_calling_library_from_stack`: Skip nil paths with `next if path.nil?`
+- `capture_call_stack`: Use `path = location.path || '<unknown>'` for nil paths
+- `log_http_request`: Wrap `build_request_data` in error handling with empty hash default
+
+**Impact**:
+- ✅ AWS SDK with instrumentation now works correctly
+- ✅ Call stack detection gracefully handles edge cases
+- ✅ Maintains core principle: logging errors never break HTTP requests
+- ✅ Comprehensive test coverage for nil path handling
+
+**Testing**:
+- Added unit tests for nil path handling in both methods
+- Added integration test for AWS SDK instrumentation scenario
+- All 333 tests pass
+
 ## 0.0.6
 
 ### Fixed
